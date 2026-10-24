@@ -1,4 +1,9 @@
+import os
 import sys
+
+# Prevent Windows Application Control policy blocks on compiled SQLAlchemy Cython extensions
+os.environ["DISABLE_SQLALCHEMY_CEXT"] = "1"
+
 from pathlib import Path
 
 # Ensure project root and backend directory are in sys.path
@@ -60,6 +65,9 @@ app.include_router(analytics.router, prefix=settings.API_V1_PREFIX)
 app.include_router(tasks.router, prefix=settings.API_V1_PREFIX)
 app.include_router(profile.router, prefix=settings.API_V1_PREFIX)
 app.include_router(coach.router, prefix=settings.API_V1_PREFIX)
+app.include_router(coach.ai_coach_router, prefix=settings.API_V1_PREFIX)
+
+
 
 
 @app.get("/")

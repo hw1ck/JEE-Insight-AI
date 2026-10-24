@@ -24,6 +24,8 @@ class StudyTaskUpdate(BaseModel):
     priority: Optional[str] = None
     completed: Optional[bool] = None
     reason: Optional[str] = None
+    retirementStatus: Optional[str] = None
+    retirementReason: Optional[str] = None
 
 
 class StudyTaskResponse(BaseModel):
@@ -36,6 +38,9 @@ class StudyTaskResponse(BaseModel):
     taskType: str
     priority: str
     completed: bool
+    completedAt: Optional[str] = None
+    retirementStatus: str = "active"
+    retirementReason: Optional[str] = None
     reason: str
     isAutoRecommended: bool = False
 
@@ -43,6 +48,7 @@ class StudyTaskResponse(BaseModel):
         "from_attributes": True,
         "populate_by_name": True
     }
+
 
 
 class WeakTopicToTaskInput(BaseModel):

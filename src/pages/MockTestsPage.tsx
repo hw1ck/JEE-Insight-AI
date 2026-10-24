@@ -22,7 +22,9 @@ import {
 } from 'lucide-react';
 import { MockTestSummary, Question, QuestionResponse, Difficulty, TestType, Subject } from '../types';
 import { mockTestService } from '../services/mockTestService';
+import { apiClient } from '../services/apiClient';
 import { Modal } from '../components/common/Modal';
+import { MathRenderer } from '../components/common/MathRenderer';
 import { NavPage } from '../components/layout/Sidebar';
 
 interface MockTestsPageProps {
@@ -114,11 +116,43 @@ export const MockTestsPage: React.FC<MockTestsPageProps> = ({
 
     const draft = mockTestService.getDraft(test.id);
     if (resumeDraft && draft) {
-      setResponses(draft.responses);
-      setTimerSeconds(draft.timerSeconds);
+      let restoredResponses = draft.responses;
+      let restoredTimer = draft.timerSeconds;
+
+      // Authoritative CBT State Recovery from Server
+      try {
+        const storedAttemptId = localStorage.getItem(`cbt_attempt_${test.id}`);
+        if (storedAttemptId) {
+          const serverState = await apiClient.getAttemptState(storedAttemptId);
+          if (serverState && serverState.status === 'in_progress') {
+            if (typeof serverState.remainingSeconds === 'number' && serverState.remainingSeconds > 0) {
+              restoredTimer = serverState.remainingSeconds;
+            }
+            if (serverState.responses && Object.keys(serverState.responses).length > 0) {
+              const safeMap: Record<string, QuestionResponse> = {};
+              Object.entries(serverState.responses).forEach(([qid, item]: [string, any]) => {
+                safeMap[qid] = {
+                  selectedOption: item?.selectedOption ?? null,
+                  markedForReview: Boolean(item?.markedForReview),
+                  timeSpentSeconds: Number(item?.timeSpentSeconds) || 0
+                };
+              });
+              restoredResponses = {
+                ...restoredResponses,
+                ...safeMap
+              };
+            }
+          }
+        }
+      } catch (recoveryErr) {
+        console.warn('Authoritative CBT state recovery skipped fallback:', recoveryErr);
+      }
+
+      setResponses(restoredResponses);
+      setTimerSeconds(restoredTimer);
       setCurrentIndex(draft.currentIndex || 0);
       const visited = new Set<number>();
-      Object.keys(draft.responses).forEach(qId => {
+      Object.keys(restoredResponses).forEach(qId => {
         const qIdx = qs.findIndex(q => q.id === qId);
         if (qIdx !== -1) visited.add(qIdx);
       });
@@ -165,6 +199,29 @@ export const MockTestsPage: React.FC<MockTestsPageProps> = ({
     }
     setActiveTest(null);
     onTestActiveChange?.(false);
+  };
+
+  const handleKeypadPress = (val: string) => {
+    if (!questions[currentIndex]) return;
+    const qId = questions[currentIndex].id;
+    const currentVal = responses[qId]?.selectedOption || '';
+    let newVal = currentVal;
+
+    if (val === 'CLEAR') {
+      newVal = '';
+    } else if (val === 'BACK') {
+      newVal = currentVal.slice(0, -1);
+    } else if (val === '-') {
+      if (!currentVal) newVal = '-';
+      else if (currentVal.startsWith('-')) newVal = currentVal.slice(1);
+      else newVal = '-' + currentVal;
+    } else if (val === '.') {
+      if (!currentVal.includes('.')) newVal = currentVal + '.';
+    } else {
+      newVal = currentVal + val;
+    }
+
+    handleSelectOption(newVal);
   };
 
   const handleSelectOption = (optionId: string) => {
@@ -572,7 +629,11 @@ export const MockTestsPage: React.FC<MockTestsPageProps> = ({
                     <span className="badge badge-warning" style={{ fontSize: '11px' }}>{currentQ.difficulty}</span>
                   </div>
                   <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                    Correct: <strong style={{ color: 'var(--success)' }}>+4</strong> | Incorrect: <strong style={{ color: 'var(--danger)' }}>-1</strong> | Unanswered: <strong>0</strong>
+                    {(!currentQ.options || currentQ.options.length === 0) ? (
+                      <>Numerical Type: Correct <strong style={{ color: 'var(--success)' }}>+4</strong> | Incorrect <strong style={{ color: 'var(--text-muted)' }}>0</strong> | Unanswered <strong>0</strong></>
+                    ) : (
+                      <>MCQ Type: Correct <strong style={{ color: 'var(--success)' }}>+4</strong> | Incorrect <strong style={{ color: 'var(--danger)' }}>-1</strong> | Unanswered <strong>0</strong></>
+                    )}
                   </div>
                 </div>
 
@@ -589,54 +650,113 @@ export const MockTestsPage: React.FC<MockTestsPageProps> = ({
                     marginBottom: '24px'
                   }}
                 >
-                  {currentQ.statement}
+                  <MathRenderer text={currentQ.statement} />
                 </div>
 
-                {/* Multiple Choice Options */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
-                  {currentQ.options.map(opt => {
-                    const isSelected = currentResp?.selectedOption === opt.id;
-                    return (
-                      <div
-                        key={opt.id}
-                        onClick={() => handleSelectOption(opt.id)}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '14px',
-                          padding: '14px 18px',
-                          borderRadius: '8px',
-                          border: `1px solid ${isSelected ? 'var(--accent-blue)' : 'var(--border-default)'}`,
-                          backgroundColor: isSelected ? 'var(--accent-blue-light)' : 'var(--bg-surface)',
-                          cursor: 'pointer',
-                          transition: 'all var(--transition-fast)'
-                        }}
-                      >
+                {/* Multiple Choice Options OR Numerical Keypad */}
+                {currentQ.options && currentQ.options.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
+                    {currentQ.options.map(opt => {
+                      const isSelected = currentResp?.selectedOption === opt.id;
+                      return (
                         <div
+                          key={opt.id}
+                          onClick={() => handleSelectOption(opt.id)}
                           style={{
-                            width: '24px',
-                            height: '24px',
-                            borderRadius: '50%',
-                            border: `2px solid ${isSelected ? 'var(--accent-blue)' : 'var(--border-strong)'}`,
-                            backgroundColor: isSelected ? 'var(--accent-blue)' : 'transparent',
-                            color: isSelected ? '#ffffff' : 'var(--text-secondary)',
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '12px',
-                            fontWeight: 700,
-                            flexShrink: 0
+                            gap: '14px',
+                            padding: '14px 18px',
+                            borderRadius: '8px',
+                            border: `1px solid ${isSelected ? 'var(--accent-blue)' : 'var(--border-default)'}`,
+                            backgroundColor: isSelected ? 'var(--accent-blue-light)' : 'var(--bg-surface)',
+                            cursor: 'pointer',
+                            transition: 'all var(--transition-fast)'
                           }}
                         >
-                          {opt.id}
+                          <div
+                            style={{
+                              width: '24px',
+                              height: '24px',
+                              borderRadius: '50%',
+                              border: `2px solid ${isSelected ? 'var(--accent-blue)' : 'var(--border-strong)'}`,
+                              backgroundColor: isSelected ? 'var(--accent-blue)' : 'transparent',
+                              color: isSelected ? '#ffffff' : 'var(--text-secondary)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              flexShrink: 0
+                            }}
+                          >
+                            {opt.id}
+                          </div>
+                          <span style={{ fontSize: '14px', color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: isSelected ? 500 : 400 }}>
+                            <MathRenderer text={opt.text} />
+                          </span>
                         </div>
-                        <span style={{ fontSize: '14px', color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)', fontWeight: isSelected ? 500 : 400 }}>
-                          {opt.text}
-                        </span>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ marginBottom: '32px', padding: '18px', backgroundColor: 'var(--bg-surface)', borderRadius: '8px', border: '1px solid var(--border-default)' }}>
+                    <div style={{ marginBottom: '14px' }}>
+                      <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                        Numerical Answer Input (NTA Virtual Keypad):
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <input
+                          type="text"
+                          readOnly
+                          value={currentResp?.selectedOption || ''}
+                          placeholder="Click keys below to input answer..."
+                          className="input-control"
+                          style={{ fontSize: '18px', fontWeight: 700, letterSpacing: '1px', width: '300px', backgroundColor: 'var(--bg-app)' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleKeypadPress('CLEAR')}
+                          className="btn btn-secondary btn-sm"
+                          style={{ padding: '6px 14px' }}
+                        >
+                          Clear Input
+                        </button>
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
+
+                    {/* NTA Virtual Keypad Matrix */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 60px)', gap: '8px', maxWidth: '270px' }}>
+                      {['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '-'].map(k => (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => handleKeypadPress(k)}
+                          className="btn btn-secondary"
+                          style={{ height: '42px', fontSize: '15px', fontWeight: 600 }}
+                        >
+                          {k}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => handleKeypadPress('BACK')}
+                        className="btn btn-secondary"
+                        style={{ gridColumn: 'span 2', height: '38px', fontSize: '12px' }}
+                      >
+                        Backspace
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleKeypadPress('CLEAR')}
+                        className="btn btn-secondary"
+                        style={{ gridColumn: 'span 2', height: '38px', fontSize: '12px' }}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Bottom Navigation & Action Buttons */}
                 <div

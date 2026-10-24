@@ -1,0 +1,33 @@
+{
+  "dataset_name": "JEE InsightAI Expanded Multimodal PYQ Bank (2020-2026)",
+  "total_merged_records": 7784,
+  "existing_baseline_count": 2241,
+  "newly_integrated_count": 5543,
+  "total_rejected_records": 0,
+  "subject_distribution": {
+    "Physics": 2367,
+    "Chemistry": 2208,
+    "Mathematics": 3209
+  },
+  "year_distribution": {
+    "2020": 1795,
+    "2021": 446,
+    "2022": 1723,
+    "2023": 1805,
+    "2024": 1540,
+    "2025": 475
+  },
+  "question_type_distribution": {
+    "single_correct": 5434,
+    "numerical": 2350
+  },
+  "verified_records_count": 7505,
+  "unverified_records_count": 279,
+  "total_distinct_chapters": 244,
+  "provenance_tracking": {
+    "2020_2021": "soughed/jee-main-questions (CC-BY-4.0)",
+    "2022_2023_2024": "ruh-ai/grafite-jee-mains-qna-no-img (Apache-2.0)",
+    "2025": "PhysicsWallahAI/JEE-Main-2025-Math (Apache-2.0 / Open Access)",
+    "2026": "NTA Official Session 1 Archive / EduDevCommons (Registration & Shift Telemetry; Questions candidate-login restricted on jeemain.nta.nic.in)"
+  }
+}

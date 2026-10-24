@@ -8,6 +8,7 @@ from backend.app.models.attempt import (
     TestAttemptModel, AttemptResponseModel, QuestionTelemetryModel
 )
 from backend.app.models.task import StudyTaskModel
+from backend.app.models.coach import CoachMessageModel
 
 __all__ = [
     "StudentProfileModel",
@@ -23,4 +24,6 @@ __all__ = [
     "AttemptResponseModel",
     "QuestionTelemetryModel",
     "StudyTaskModel",
+    "CoachMessageModel",
 ]
+

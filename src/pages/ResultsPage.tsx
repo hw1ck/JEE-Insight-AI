@@ -954,7 +954,7 @@ export const ResultsPage: React.FC<ResultsPageProps> = ({
                         <span className="badge badge-blue">{q.topic}</span>
                         <span className="badge badge-warning" style={{ fontSize: '10px' }}>{q.difficulty}</span>
                       </div>
-                      <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         {isCorrect ? (
                           <span className="badge badge-success">+{attempt.markingScheme?.correct || 4} Marks</span>
                         ) : isUnattempted ? (
@@ -962,6 +962,15 @@ export const ResultsPage: React.FC<ResultsPageProps> = ({
                         ) : (
                           <span className="badge badge-danger">{attempt.markingScheme?.incorrect || -1} Mark (Incorrect)</span>
                         )}
+                        <button
+                          onClick={() => onNavigate('ai-coach', `question:${q.id}`)}
+                          className="btn btn-secondary btn-sm"
+                          style={{ fontSize: '11px', padding: '2px 8px', gap: '4px' }}
+                          title="Ask AI Coach to explain this question and autopsy mistakes"
+                        >
+                          <Bot size={12} />
+                          <span>Ask AI Coach</span>
+                        </button>
                       </div>
                     </div>
 

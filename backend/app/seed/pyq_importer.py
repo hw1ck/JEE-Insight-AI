@@ -19,6 +19,7 @@ logger = logging.getLogger("pyq_importer")
 PROCESSED_FILE = "data/question_bank/processed/jee_main_pyqs_normalized.jsonl"
 
 OFFICIAL_75Q_PAPERS = {
+    # 2020 Official Papers
     "01": {
         "id": "pyq-jee-2020-p01",
         "title": "JEE Main 2020 Official Paper 01 (Full 75-Q Mock)",
@@ -63,6 +64,39 @@ OFFICIAL_75Q_PAPERS = {
         "duration_minutes": 180,
         "max_marks": 300,
         "difficulty": "Moderate"
+    },
+    # 2022 Official Paper
+    "2022-jun24-s2": {
+        "id": "pyq-jee-2022-jun24-s2",
+        "match_shift": "jee-main-2022-online-24th-june-evening-shift",
+        "title": "JEE Main 2022 Official Paper — 24 June Evening Shift (Full 75-Q Mock)",
+        "description": "Authentic full-length JEE Main 2022 official shift paper conducted by NTA. Features full syllabus coverage across Physics, Chemistry, and Mathematics.",
+        "questions_count": 75,
+        "duration_minutes": 180,
+        "max_marks": 300,
+        "difficulty": "Moderate"
+    },
+    # 2023 Official Paper
+    "2023-jan31-s2": {
+        "id": "pyq-jee-2023-jan31-s2",
+        "match_shift": "jee-main-2023-online-31st-january-evening-shift",
+        "title": "JEE Main 2023 Official Paper — 31 Jan Evening Shift (Full 75-Q Mock)",
+        "description": "Authentic full-length JEE Main 2023 official paper from Session 1. Complete with verified answer keys and worked solutions across all three subjects.",
+        "questions_count": 75,
+        "duration_minutes": 180,
+        "max_marks": 300,
+        "difficulty": "Moderate"
+    },
+    # 2024 Official Paper
+    "2024-jan31-s1": {
+        "id": "pyq-jee-2024-jan31-s1",
+        "match_shift": "jee-main-2024-online-31st-january-morning-shift",
+        "title": "JEE Main 2024 Official Paper — 31 Jan Morning Shift (Full 75-Q Mock)",
+        "description": "Authentic full-length JEE Main 2024 Session 1 paper conducted by NTA. Features modern assertion-reason questions, multi-concept matching, and numerical values.",
+        "questions_count": 75,
+        "duration_minutes": 180,
+        "max_marks": 300,
+        "difficulty": "Moderate"
     }
 }
 
@@ -86,11 +120,11 @@ def import_pyqs(db: Session = None, max_records: int = None):
         db = SessionLocal()
 
     print("=" * 65)
-    print("JEE InsightAI — Phase 6: Ingesting Validated PYQ Question Bank")
+    print("JEE InsightAI — Phase 5: Ingesting Expanded PYQ Question Bank")
     print("=" * 65)
 
     if not os.path.exists(PROCESSED_FILE):
-        print(f"[ERROR] Processed file {PROCESSED_FILE} not found. Run normalizer first.")
+        print(f"[ERROR] Processed file {PROCESSED_FILE} not found. Run expansion_normalizer first.")
         return
 
     concept_lookup = build_concept_lookup(db)
@@ -115,16 +149,25 @@ def import_pyqs(db: Session = None, max_records: int = None):
             db.add(new_test)
             print(f"Created MockTest header: {pmeta['id']} - {pmeta['title']}")
         else:
+            existing_test.title = pmeta["title"]
+            existing_test.description = pmeta["description"]
             print(f"MockTest header already exists: {pmeta['id']}")
     db.commit()
 
     # 2. Ingest normalized questions
     imported_count = 0
     updated_count = 0
-    skipped_count = 0
     test_assigned_count = 0
 
     paper_question_counters = {pcode: 1 for pcode in OFFICIAL_75Q_PAPERS}
+
+    # Cache existing question IDs to decide insert vs update rapidly
+    existing_q_ids = set(r[0] for r in db.query(QuestionModel.id).all())
+    print(f"Baseline questions in database before import: {len(existing_q_ids)}")
+
+    questions_to_insert = []
+    options_to_insert = []
+    batch_size = 400
 
     with open(PROCESSED_FILE, "r", encoding="utf-8") as f:
         for idx, line in enumerate(f, start=1):
@@ -153,18 +196,27 @@ def import_pyqs(db: Session = None, max_records: int = None):
             v_status = rec.get("verification_status", "VERIFIED")
 
             # Determine if question belongs to one of the complete 75-Q official paper tests
-            parts = qid.replace("JEE-", "").split("-")
-            paper_code = parts[1] if len(parts) >= 2 else None
-
             test_id = None
-            q_num = 1
-            if paper_code in OFFICIAL_75Q_PAPERS:
-                test_id = OFFICIAL_75Q_PAPERS[paper_code]["id"]
-                q_num = paper_question_counters[paper_code]
-                paper_question_counters[paper_code] += 1
+            q_num = idx
+
+            # Check 2020 papers by paper code in ID
+            parts = qid.replace("JEE-", "").split("-")
+            paper_code_2020 = parts[1] if len(parts) >= 2 else None
+            if paper_code_2020 in OFFICIAL_75Q_PAPERS and paper_question_counters[paper_code_2020] <= 75:
+                test_id = OFFICIAL_75Q_PAPERS[paper_code_2020]["id"]
+                q_num = paper_question_counters[paper_code_2020]
+                paper_question_counters[paper_code_2020] += 1
                 test_assigned_count += 1
             else:
-                q_num = idx
+                # Check 2022-2024 shift matches
+                for pcode, pmeta in OFFICIAL_75Q_PAPERS.items():
+                    m_shift = pmeta.get("match_shift")
+                    if m_shift and m_shift in src_ref and paper_question_counters[pcode] <= 75:
+                        test_id = pmeta["id"]
+                        q_num = paper_question_counters[pcode]
+                        paper_question_counters[pcode] += 1
+                        test_assigned_count += 1
+                        break
 
             # Concept matching fallback
             matched_concept_id = None
@@ -175,9 +227,7 @@ def import_pyqs(db: Session = None, max_records: int = None):
                     matched_concept_id = cid
                     break
 
-            # Check if exists in DB
-            q_model = db.query(QuestionModel).filter_by(id=qid).first()
-            if not q_model:
+            if qid not in existing_q_ids:
                 q_model = QuestionModel(
                     id=qid,
                     test_id=test_id,
@@ -205,57 +255,38 @@ def import_pyqs(db: Session = None, max_records: int = None):
                     diagram_data=diag_data
                 )
                 db.add(q_model)
+                existing_q_ids.add(qid)
                 imported_count += 1
+
+                # Populate Options for new MCQs
+                raw_options = rec.get("options", [])
+                if raw_options and qtype == "single_correct":
+                    for opt in raw_options:
+                        opt_key = opt.get("id", "A")
+                        opt_text = opt.get("text", "")
+                        db.add(QuestionOptionModel(
+                            id=f"{qid}-{opt_key}",
+                            question_id=qid,
+                            option_key=opt_key,
+                            text=opt_text
+                        ))
             else:
-                # Update metadata in place
-                q_model.test_id = test_id
-                q_model.question_number = q_num
-                q_model.subject = subject
-                q_model.topic = topic
-                q_model.chapter = chapter
-                q_model.statement = stmt
-                q_model.correct_option_id = corr_ans
-                q_model.explanation = exp
-                q_model.difficulty = diff
-                q_model.year = yr
-                q_model.exam_session = session
-                q_model.shift = shift
-                q_model.question_type = qtype
-                q_model.numerical_answer = num_ans
-                q_model.source_paper = src_ref
-                q_model.is_pyq = 1
-                q_model.verification_status = v_status
-                q_model.diagram_data = diag_data
                 updated_count += 1
 
-            # Populate Options for MCQs
-            raw_options = rec.get("options", [])
-            if raw_options and qtype == "single_correct":
-                # Clear old options if any
-                db.query(QuestionOptionModel).filter_by(question_id=qid).delete()
-                for opt in raw_options:
-                    opt_key = opt.get("id", "A")
-                    opt_text = opt.get("text", "")
-                    opt_model = QuestionOptionModel(
-                        id=f"{qid}-{opt_key}",
-                        question_id=qid,
-                        option_key=opt_key,
-                        text=opt_text
-                    )
-                    db.add(opt_model)
-
-            # Commit periodically to keep memory bounded
-            if idx % 200 == 0:
+            # Periodic commit
+            if idx % batch_size == 0:
                 db.commit()
-                print(f"  Processed {idx} questions...")
+                print(f"  Processed {idx} questions ({imported_count} new imported)...")
 
     db.commit()
+    post_import_count = db.query(QuestionModel).count()
     print("=" * 65)
-    print("PYQ Ingestion Completed!")
+    print("Expanded PYQ Ingestion Completed!")
     print(f"  New questions imported: {imported_count}")
     print(f"  Existing questions updated: {updated_count}")
+    print(f"  Total questions now in database: {post_import_count}")
     print(f"  Questions assigned to Official 75-Q Mock Tests: {test_assigned_count}")
-    print(f"  Standalone Question Bank items: {imported_count + updated_count - test_assigned_count}")
+    print(f"  Standalone Question Bank items: {post_import_count - test_assigned_count}")
     print("=" * 65)
 
 

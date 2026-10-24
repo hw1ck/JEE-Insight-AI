@@ -5,14 +5,32 @@ import { apiClient } from './apiClient';
 
 const CHAT_STORAGE_KEY = 'jee_insight_chat_history';
 
+export interface SendMessageOptions {
+  contextTopic?: string;
+  questionId?: string;
+  attemptId?: string;
+  availableStudyHours?: number;
+}
+
+export interface CoachStatusInfo {
+  isLiveAiAvailable: boolean;
+  model: string;
+  provider: string;
+  contextSourcesAvailable: string[];
+}
+
 export interface IAICoachService {
   getMessages(): Promise<ChatMessage[]>;
-  sendMessage(userText: string, contextTopic?: string): Promise<{ userMsg: ChatMessage; coachMsg: ChatMessage }>;
+  sendMessage(
+    userText: string,
+    options?: string | SendMessageOptions
+  ): Promise<{ userMsg: ChatMessage; coachMsg: ChatMessage }>;
   clearChat(): Promise<ChatMessage[]>;
+  getCoachStatus(): Promise<CoachStatusInfo>;
 }
 
 class LocalAICoachService implements IAICoachService {
-  private getStored(): ChatMessage[] {
+  public getStored(): ChatMessage[] {
     const raw = localStorage.getItem(CHAT_STORAGE_KEY);
     if (!raw) {
       localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(INITIAL_AI_CHAT_MESSAGES));
@@ -25,7 +43,7 @@ class LocalAICoachService implements IAICoachService {
     }
   }
 
-  private save(messages: ChatMessage[]): void {
+  public save(messages: ChatMessage[]): void {
     localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
   }
 
@@ -33,14 +51,29 @@ class LocalAICoachService implements IAICoachService {
     return this.getStored();
   }
 
-  async sendMessage(userText: string, contextTopic?: string): Promise<{ userMsg: ChatMessage; coachMsg: ChatMessage }> {
+  async getCoachStatus(): Promise<CoachStatusInfo> {
+    return {
+      isLiveAiAvailable: false,
+      model: 'offline-diagnostic-heuristics',
+      provider: 'Offline Diagnostic Engine',
+      contextSourcesAvailable: ['Stored Mock Tests', 'Weak Concepts Matrix', 'Demo Baseline']
+    };
+  }
+
+  async sendMessage(
+    userText: string,
+    options?: string | SendMessageOptions
+  ): Promise<{ userMsg: ChatMessage; coachMsg: ChatMessage }> {
+    const opts: SendMessageOptions = typeof options === 'string' ? { contextTopic: options } : (options || {});
     const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const userMsg: ChatMessage = {
       id: `msg-user-${Date.now()}`,
       sender: 'student',
       text: userText,
       timestamp: timeStr,
-      contextTopic
+      contextTopic: opts.contextTopic,
+      questionId: opts.questionId,
+      attemptId: opts.attemptId
     };
 
     // Retrieve latest attempt context if exists
@@ -57,7 +90,24 @@ class LocalAICoachService implements IAICoachService {
     ];
     let actionLinks: ChatMessage['actionLinks'] = [];
 
-    if (q.includes('score') || q.includes('why') || q.includes('change') || q.includes('trajectory')) {
+    if (opts.questionId || q.includes('question') || q.includes('q-')) {
+      const qTarget = opts.questionId || 'the requested problem';
+      reply = `### Question Diagnostic Autopsy (${qTarget})
+
+• **Core Concept**: Analyzing key concepts and common traps for this JEE Main problem.
+• **Common Failure Mode**: Students typically struggle with either algebraic sign conventions or attempting complex expansion without checking trigonometric invariants or properties.
+• **Recommended Step-by-Step Approach**:
+  1. Inspect invariants before expanding (e.g. King's Property in Definite Integrals or conservation laws in Mechanics).
+  2. Verify boundary conditions and limits at each substitution step.
+  3. Re-check calculations before submitting to avoid -1 negative marking penalties.
+
+Would you like to practice 5 similar questions or review the prerequisite theory?`;
+      suggestions = ['How to avoid negative marks in Maths?', 'Practice similar questions', 'Add topic to Study Planner'];
+      actionLinks = [
+        { label: 'View Weak Concepts', page: 'weak-concepts' },
+        { label: 'Open Study Planner', page: 'study-planner' }
+      ];
+    } else if (q.includes('score') || q.includes('why') || q.includes('change') || q.includes('trajectory')) {
       reply = `Here is the data breakdown of your recent performance:
 
 1. **Current Benchmark**: Your latest recorded score is **${currentScore}/300** with **${currentAccuracy}%** accuracy.
@@ -106,23 +156,20 @@ Recommendation: If you omit uncertain guesses in Mathematics where confidence is
         { label: 'Open Weak Concepts Matrix', page: 'weak-concepts' }
       ];
     } else if (q.includes('plan') || q.includes('seven') || q.includes('schedule') || q.includes('week') || q.includes('revision')) {
-      reply = `Here is a high-leverage 7-Day Precision Revision Plan tailored to your ${currentScore}/300 baseline:
+      const hours = opts.availableStudyHours || 2;
+      reply = `Here is a high-leverage Precision Revision Plan tailored to your ${currentScore}/300 baseline (${hours} hours daily):
 
-• **Mon-Tue (Calculus Recovery)**:
-  - 90 mins daily on Definite Integration standard properties.
-  - 30 mins timed drill (10 questions, strict 2.5 min cap).
+• **Session 1 (Calculus Recovery — ${Math.round(hours * 30)} mins)**:
+  - Definite Integration standard properties and trigonometric half-angle substitutions.
+  - 10-question timed speed drill (strict 2.5 min cap per problem).
 
-• **Wed-Thu (Organic & Probability)**:
-  - Revisit SN1/SN2 solvent polarity tables and carbocation shifts.
-  - Bayes Theorem tree diagrams and partitioning problems.
+• **Session 2 (Organic & Mechanics — ${Math.round(hours * 30)} mins)**:
+  - Revisit SN1/SN2 solvent polarity tables and carbocation rearrangements.
+  - Rotational dynamics torque about center of mass drills.
 
-• **Fri (Speed & Formula Sprint)**:
-  - Rotational motion conservation laws.
-  - Conic sections parametric equations memorization.
-
-• **Sat-Sun (Simulation & Review)**:
-  - Saturday: 60-min Mathematics Sectional test.
-  - Sunday: Full analysis and error classification into 'Concept Gap' vs 'Silly Error'.`;
+• **Checkpoints**:
+  - Evaluate accuracy weekly on JEE InsightAI Sectional tests.
+  - Categorize errors into 'Concept Gap' vs 'Silly Error' before moving to new topics.`;
       suggestions = ['Apply this plan to my Study Planner', 'Simulate score with this plan', 'Ask about Physics strategy'];
       actionLinks = [
         { label: 'View Study Planner', page: 'study-planner' }
@@ -179,7 +226,13 @@ Would you like to review related concept diagnostics or add a focused drill to y
       sender: 'coach',
       text: reply,
       timestamp: timeStr,
-      contextTopic,
+      contextTopic: opts.contextTopic,
+      questionId: opts.questionId,
+      attemptId: opts.attemptId,
+      isSimulated: true,
+      modelUsed: 'offline-diagnostic-heuristics',
+      disclaimer: 'Generated via offline rule-based heuristics (Set GEMINI_API_KEY in backend/.env to activate live Gemini AI Coach).',
+      sourceSummary: 'Local diagnostic heuristics & latest test attempt data',
       actionSuggestions: suggestions,
       actionLinks
     };
@@ -201,29 +254,96 @@ class HybridAICoachService implements IAICoachService {
   private localService = new LocalAICoachService();
 
   async getMessages(): Promise<ChatMessage[]> {
+    try {
+      if (await apiClient.isBackendAvailable()) {
+        const history = await apiClient.getCoachHistory();
+        if (history && history.length > 0) {
+          const mapped: ChatMessage[] = history.map((h: any) => ({
+            id: h.id,
+            sender: h.role === 'assistant' ? 'coach' : 'student',
+            text: h.content || h.text,
+            timestamp: h.timestamp || 'Recent',
+            contextTopic: h.contextTopic,
+            questionId: h.questionId,
+            modelUsed: h.provider,
+            isSimulated: h.provider !== 'google-gemini'
+          }));
+          return mapped;
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to load coach history from backend, falling back to local cache:', err);
+    }
     return this.localService.getMessages();
   }
 
-  async sendMessage(userText: string, contextTopic?: string): Promise<{ userMsg: ChatMessage; coachMsg: ChatMessage }> {
+  async getCoachStatus(): Promise<CoachStatusInfo> {
     try {
       if (await apiClient.isBackendAvailable()) {
-        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const userMsg: ChatMessage = {
-          id: `msg-user-${Date.now()}`,
-          sender: 'student',
-          text: userText,
-          timestamp: timeStr,
-          contextTopic
-        };
+        const status = await apiClient.getCoachStatus();
+        if (status) {
+          return {
+            isLiveAiAvailable: status.isLiveAiAvailable,
+            model: status.model,
+            provider: status.provider,
+            contextSourcesAvailable: status.contextSourcesAvailable || []
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch coach status from backend, falling back to local info:', err);
+    }
+    return this.localService.getCoachStatus();
+  }
 
-        const res = await apiClient.sendCoachChat(userText, contextTopic);
-        if (res && res.reply) {
+  async sendMessage(
+    userText: string,
+    options?: string | SendMessageOptions
+  ): Promise<{ userMsg: ChatMessage; coachMsg: ChatMessage }> {
+    const opts: SendMessageOptions = typeof options === 'string' ? { contextTopic: options } : (options || {});
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    const userMsg: ChatMessage = {
+      id: `msg-user-${Date.now()}`,
+      sender: 'student',
+      text: userText,
+      timestamp: timeStr,
+      contextTopic: opts.contextTopic,
+      questionId: opts.questionId,
+      attemptId: opts.attemptId
+    };
+
+    try {
+      if (await apiClient.isBackendAvailable()) {
+        // Collect last 6 messages from stored conversation for multi-turn coherence
+        const stored = this.localService.getStored();
+        const conversationHistory = stored.slice(-6).map(m => ({
+          sender: m.sender,
+          text: m.text
+        }));
+
+        const res = await apiClient.sendCoachChat({
+          message: userText,
+          contextTopic: opts.contextTopic,
+          questionId: opts.questionId,
+          attemptId: opts.attemptId,
+          availableStudyHours: opts.availableStudyHours,
+          conversationHistory
+        });
+
+        if (res && (res.text || res.reply)) {
           const coachMsg: ChatMessage = {
             id: `msg-coach-${Date.now() + 1}`,
             sender: 'coach',
-            text: res.reply,
+            text: res.text || res.reply,
             timestamp: timeStr,
-            contextTopic,
+            contextTopic: opts.contextTopic,
+            questionId: opts.questionId,
+            attemptId: opts.attemptId,
+            isSimulated: res.isSimulated,
+            modelUsed: res.modelUsed,
+            sourceSummary: res.sourceSummary,
+            disclaimer: res.disclaimer,
             actionSuggestions: res.actionSuggestions || [],
             actionLinks: res.actionLinks || []
           };
@@ -237,12 +357,20 @@ class HybridAICoachService implements IAICoachService {
         }
       }
     } catch (err) {
-      console.warn('Backend coach chat failed, using local rule-based response:', err);
+      console.warn('Backend coach chat failed, falling back to local diagnostic heuristics:', err);
     }
-    return this.localService.sendMessage(userText, contextTopic);
+
+    return this.localService.sendMessage(userText, opts);
   }
 
   async clearChat(): Promise<ChatMessage[]> {
+    try {
+      if (await apiClient.isBackendAvailable()) {
+        await apiClient.clearCoachHistory();
+      }
+    } catch (err) {
+      console.warn('Failed to clear backend coach history:', err);
+    }
     return this.localService.clearChat();
   }
 }

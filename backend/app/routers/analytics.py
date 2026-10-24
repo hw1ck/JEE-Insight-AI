@@ -5,6 +5,7 @@ from backend.app.database import get_db
 from backend.app.models.attempt import TestAttemptModel, AttemptResponseModel
 from backend.app.models.question import QuestionModel
 from backend.app.models.user import StudentProfileModel
+from backend.app.models.task import StudyTaskModel
 from backend.app.schemas.analytics import (
     DashboardMetricsResponse, AnalyticsWorkspaceResponse
 )
@@ -12,6 +13,8 @@ from backend.app.services.diagnostics import MarkLossAnalyzer
 from backend.app.services.speed_accuracy import SpeedAccuracyAnalyzer
 from backend.app.services.repeated_mistakes import RepeatedMistakesDetector
 from backend.app.services.persona import StudentPersonaClassifier
+from backend.app.services.feedback_loop import FeedbackLoopService
+
 
 router = APIRouter(prefix="/analytics", tags=["Performance Analytics & Diagnostics"])
 
@@ -156,12 +159,48 @@ def get_analytics_workspace(
         })
     topic_rankings.sort(key=lambda x: x["accuracy"])
 
-    # 4. Difficulty Breakdown
-    difficulty_breakdown = [
-        {"difficulty": "Easy", "accuracy": 78.4, "attempted": 42, "total": 45},
-        {"difficulty": "Moderate", "accuracy": 54.2, "attempted": 55, "total": 70},
-        {"difficulty": "Challenging", "accuracy": 31.8, "attempted": 28, "total": 40}
-    ]
+    # 4. Difficulty Breakdown (computed dynamically from actual attempts & questions)
+    attempt_ids = [a.id for a in attempts]
+    diff_counts = {
+        "Easy": {"attempted": 0, "correct": 0, "total": 0},
+        "Moderate": {"attempted": 0, "correct": 0, "total": 0},
+        "Challenging": {"attempted": 0, "correct": 0, "total": 0}
+    }
+
+    if attempt_ids:
+        query_resp = db.query(AttemptResponseModel, QuestionModel).join(
+            QuestionModel, AttemptResponseModel.question_id == QuestionModel.id
+        ).filter(AttemptResponseModel.attempt_id.in_(attempt_ids))
+
+        if subject != "All":
+            query_resp = query_resp.filter(QuestionModel.subject == subject)
+
+        for resp, q in query_resp.all():
+            diff = q.difficulty or "Moderate"
+            if diff in ["Easy", "Simple"]:
+                norm_diff = "Easy"
+            elif diff in ["Hard", "Challenging", "Tough"]:
+                norm_diff = "Challenging"
+            else:
+                norm_diff = "Moderate"
+
+            diff_counts[norm_diff]["total"] += 1
+            if resp.selected_option is not None and str(resp.selected_option).strip() != "":
+                diff_counts[norm_diff]["attempted"] += 1
+                if resp.is_correct:
+                    diff_counts[norm_diff]["correct"] += 1
+
+    difficulty_breakdown = []
+    for d_name in ["Easy", "Moderate", "Challenging"]:
+        data = diff_counts[d_name]
+        att = data["attempted"]
+        acc = round((data["correct"] / att) * 100, 1) if att > 0 else 0.0
+        difficulty_breakdown.append({
+            "difficulty": d_name,
+            "accuracy": acc,
+            "attempted": att,
+            "total": data["total"]
+        })
 
     # 5. Outcome distribution
     total_correct = sum(a.correct_count for a in attempts)
@@ -175,11 +214,39 @@ def get_analytics_workspace(
         {"status": "Unattempted", "count": total_unattempted, "percentage": round(total_unattempted / grand_total * 100, 1), "color": "#94a3b8"}
     ]
 
-    time_analysis = [
-        {"subject": "Physics", "avgSeconds": 105.0, "targetSeconds": 110.0},
-        {"subject": "Chemistry", "avgSeconds": 85.0, "targetSeconds": 90.0},
-        {"subject": "Mathematics", "avgSeconds": 150.0, "targetSeconds": 130.0}
-    ]
+    # 6. Pacing & Time Analysis (computed dynamically from actual attempt responses)
+    subj_time_data = {
+        "Physics": {"seconds_sum": 0.0, "count": 0, "target": 110.0},
+        "Chemistry": {"seconds_sum": 0.0, "count": 0, "target": 90.0},
+        "Mathematics": {"seconds_sum": 0.0, "count": 0, "target": 130.0}
+    }
+
+    if attempt_ids:
+        timing_query = db.query(AttemptResponseModel.time_spent_seconds, QuestionModel.subject).join(
+            QuestionModel, AttemptResponseModel.question_id == QuestionModel.id
+        ).filter(
+            AttemptResponseModel.attempt_id.in_(attempt_ids),
+            AttemptResponseModel.time_spent_seconds > 0,
+            AttemptResponseModel.time_spent_seconds <= 1800
+        )
+        if subject != "All":
+            timing_query = timing_query.filter(QuestionModel.subject == subject)
+
+        for t_sec, s_name in timing_query.all():
+            if s_name in subj_time_data and t_sec:
+                subj_time_data[s_name]["seconds_sum"] += t_sec
+                subj_time_data[s_name]["count"] += 1
+
+    time_analysis = []
+    for s_name, t_info in subj_time_data.items():
+        cnt = t_info["count"]
+        avg_s = round(t_info["seconds_sum"] / cnt, 1) if cnt > 0 else 0.0
+        time_analysis.append({
+            "subject": s_name,
+            "avgSeconds": avg_s,
+            "targetSeconds": t_info["target"]
+        })
+
 
     return AnalyticsWorkspaceResponse(
         scoreProgression=progression,
@@ -315,3 +382,64 @@ def get_weak_concepts(
 
     results.sort(key=lambda x: x["accuracy"])
     return results
+
+
+@router.get("/feedback-loop/task-outcomes")
+def get_study_task_outcomes(
+    student_id: Optional[str] = "student-aarav-01",
+    db: Session = Depends(get_db)
+):
+    """
+    Evaluates observed before-and-after accuracy on topics targeted by completed study tasks.
+    Clearly marks observations as empirical association, not guaranteed causation.
+    """
+    completed_tasks = db.query(StudyTaskModel).filter(
+        StudyTaskModel.student_id == student_id,
+        StudyTaskModel.completed == True
+    ).order_by(StudyTaskModel.completed_at.desc(), StudyTaskModel.updated_at.desc()).all()
+
+    outcomes = []
+    for task in completed_tasks:
+        analysis = FeedbackLoopService.analyze_task_outcome(db, task.id, student_id)
+        outcomes.append(analysis)
+
+    return {
+        "studentId": student_id,
+        "totalCompletedTasks": len(completed_tasks),
+        "evaluatedOutcomes": outcomes,
+        "disclaimer": "Observed before-and-after improvement or association across mock attempts. This represents empirical correlation and does not prove that the study task alone caused the improvement."
+    }
+
+
+@router.get("/feedback-loop/recommendations")
+def get_recommendation_evaluations(
+    student_id: Optional[str] = "student-aarav-01",
+    threshold: float = Query(75.0, ge=50.0, le=100.0, description="Accuracy threshold to retire recommendation"),
+    min_questions: int = Query(4, ge=1, le=20, description="Minimum attempted questions required for retirement evaluation"),
+    db: Session = Depends(get_db)
+):
+    """
+    Evaluates active recommendations against latest attempt performance.
+    Retires recommendations (>=75% accuracy on >= min_questions), reduces priority (50-74%),
+    or marks as active bottlenecks (<50%).
+    """
+    evaluations = FeedbackLoopService.evaluate_recommendation_retirement(
+        db, student_id=student_id, threshold=threshold, min_questions=min_questions
+    )
+    retired_count = sum(1 for e in evaluations if e["status"] == "retired")
+    improving_count = sum(1 for e in evaluations if e["status"] == "improving")
+    active_count = sum(1 for e in evaluations if e["status"] == "active")
+
+    return {
+        "studentId": student_id,
+        "threshold": threshold,
+        "minQuestions": min_questions,
+        "summary": {
+            "retired": retired_count,
+            "improving": improving_count,
+            "active": active_count,
+            "totalEvaluated": len(evaluations)
+        },
+        "recommendations": evaluations
+    }
+

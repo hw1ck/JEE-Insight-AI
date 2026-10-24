@@ -1,6 +1,5 @@
-import os
-from typing import List
-from pydantic_settings import BaseSettings
+from typing import List, Optional
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 
 
@@ -8,13 +7,10 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "JEE InsightAI Backend API"
     VERSION: str = "1.0.0"
     API_V1_PREFIX: str = "/api/v1"
-    ENVIRONMENT: str = Field(default="development", env="ENVIRONMENT")
+    ENVIRONMENT: str = "development"
 
     # Database configuration (defaults to local SQLite; compatible with PostgreSQL & pgvector)
-    DATABASE_URL: str = Field(
-        default="sqlite:///./jee_insight.db",
-        env="DATABASE_URL"
-    )
+    DATABASE_URL: str = "sqlite:///./jee_insight.db"
 
     # CORS origins for frontend integration
     CORS_ORIGINS: List[str] = [
@@ -23,6 +19,11 @@ class Settings(BaseSettings):
         "http://localhost:3000",
         "http://127.0.0.1:3000"
     ]
+
+    # AI Coach & LLM Configuration (Stage 5 Google Gemini Integration)
+    GEMINI_API_KEY: Optional[str] = None
+    AI_MODEL: str = "gemini-2.5-flash"
+    AI_REQUEST_TIMEOUT_SECONDS: float = 30.0
 
     # Behavioral heuristics thresholds (configurable per blueprint)
     SPEED_FAST_THRESHOLD_SECONDS: float = 90.0
@@ -38,9 +39,11 @@ class Settings(BaseSettings):
             return url.replace("postgres://", "postgresql://", 1)
         return url
 
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        extra="ignore"
+    )
 
 
 settings = Settings()
+

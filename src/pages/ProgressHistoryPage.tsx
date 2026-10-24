@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { HistoricalMockRecord } from '../types';
 import { historyService } from '../services/historyService';
+import { apiClient } from '../services/apiClient';
 import { Modal } from '../components/common/Modal';
 import { ProgressBar } from '../components/common/ProgressBar';
 import { NavPage } from '../components/layout/Sidebar';
@@ -29,8 +30,23 @@ export const ProgressHistoryPage: React.FC<ProgressHistoryPageProps> = ({ onNavi
   const [selectedMocksForCompare, setSelectedMocksForCompare] = useState<string[]>([]);
   const [compareResult, setCompareResult] = useState<any | null>(null);
 
+  // Feedback Loop state
+  const [taskOutcomes, setTaskOutcomes] = useState<any[]>([]);
+  const [retirementRecs, setRetirementRecs] = useState<any[]>([]);
+
   useEffect(() => {
     historyService.getAllHistory().then(list => setHistoryList(list));
+    apiClient.getTaskOutcomes().then(res => {
+      if (res && res.evaluatedOutcomes) {
+        setTaskOutcomes(res.evaluatedOutcomes);
+      }
+    }).catch(e => console.warn('Failed to load task outcomes:', e));
+
+    apiClient.getRecommendationRetirement().then(res => {
+      if (res && res.recommendations) {
+        setRetirementRecs(res.recommendations);
+      }
+    }).catch(e => console.warn('Failed to load recommendation retirement:', e));
   }, []);
 
   const handleToggleSelect = (mockId: string) => {
@@ -197,6 +213,130 @@ export const ProgressHistoryPage: React.FC<ProgressHistoryPageProps> = ({ onNavi
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Closed Feedback Loop & Recommendation Retirement Section */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
+        {/* Card 1: Completed Task Outcomes (Before vs After Accuracy) */}
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">
+              <TrendingUp size={16} color="var(--accent-blue)" />
+              <span>Closed Feedback Loop: Study Task Outcomes</span>
+            </h3>
+            <span className="badge badge-default">Telemetry Delta</span>
+          </div>
+          <div className="card-body">
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '14px', lineHeight: 1.4 }}>
+              Measures empirical concept accuracy on mock attempts before vs. after completing targeted study tasks.
+            </div>
+
+            {taskOutcomes.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '12px' }}>
+                Complete tasks in your Study Planner to activate empirical outcome tracking.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {taskOutcomes.map((t, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: '12px',
+                      borderRadius: '6px',
+                      border: '1px solid var(--border-default)',
+                      backgroundColor: 'var(--bg-surface-subtle)',
+                      fontSize: '12px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <strong style={{ color: 'var(--text-primary)' }}>{t.topic}</strong>
+                      <span className="badge badge-default">{t.subject}</span>
+                    </div>
+                    {t.status === 'insufficient_data' ? (
+                      <div style={{ color: 'var(--text-muted)', fontSize: '11px' }}>
+                        {t.message}
+                      </div>
+                    ) : (
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <span>Baseline: {t.preAccuracy}%</span>
+                          <span>Post-Task: {t.postAccuracy}%</span>
+                          <strong style={{ color: t.accuracyDelta >= 0 ? 'var(--success)' : 'var(--danger)' }}>
+                            {t.accuracyDelta >= 0 ? `+${t.accuracyDelta}%` : `${t.accuracyDelta}%`}
+                          </strong>
+                        </div>
+                        <ProgressBar
+                          value={t.postAccuracy || 50}
+                          color={t.accuracyDelta >= 0 ? 'var(--success)' : 'var(--danger)'}
+                          height={5}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ marginTop: '14px', padding: '8px 12px', borderRadius: '4px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-subtle)', fontSize: '10px', color: 'var(--text-muted)', lineHeight: 1.4 }}>
+              <strong>Notice:</strong> Observed before-and-after improvement or association across mock attempts. This represents empirical correlation and does not prove that the study task alone caused the improvement.
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2: Recommendation Retirement & Mastery Status */}
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">
+              <CheckSquare size={16} color="var(--success)" />
+              <span>Recommendation Retirement Queue</span>
+            </h3>
+            <span className="badge badge-blue">Adaptive Threshold: 75%</span>
+          </div>
+          <div className="card-body">
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '14px', lineHeight: 1.4 }}>
+              Recommendations are dynamically retired once mastery (≥75% accuracy across ≥4 questions) is verified.
+            </div>
+
+            {retirementRecs.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '12px' }}>
+                No active recommendations evaluated yet. Take a mock test to gather baseline data.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {retirementRecs.slice(0, 5).map((rec, i) => {
+                  const isRetired = rec.status === 'retired';
+                  const isImproving = rec.status === 'improving';
+
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '6px',
+                        border: `1px solid ${isRetired ? 'var(--success-border)' : isImproving ? 'var(--warning-border)' : 'var(--border-default)'}`,
+                        backgroundColor: isRetired ? 'var(--success-bg)' : isImproving ? 'var(--warning-bg)' : 'var(--bg-surface-subtle)',
+                        fontSize: '12px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <strong style={{ color: 'var(--text-primary)' }}>{rec.topic}</strong>
+                        <span
+                          className={`badge ${isRetired ? 'badge-success' : isImproving ? 'badge-warning' : 'badge-danger'}`}
+                          style={{ fontSize: '10px' }}
+                        >
+                          {isRetired ? 'Retired (Mastered)' : isImproving ? 'Improving (Medium)' : 'Active Bottleneck'}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                        {rec.rationale}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>

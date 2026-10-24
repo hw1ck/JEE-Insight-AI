@@ -1,25 +1,26 @@
 {
-  "total_records": 2241,
-  "verified_records": 1962,
+  "total_records": 7784,
+  "existing_pre_expansion": 2241,
+  "newly_added_records": 5543,
+  "verified_records": 7505,
   "needs_review_records": 279,
   "subject_distribution": {
-    "Chemistry": 731,
-    "Mathematics": 753,
-    "Physics": 757
-  },
-  "difficulty_distribution": {
-    "Medium": 1476,
-    "Hard": 379,
-    "Easy": 386
+    "Physics": 2367,
+    "Chemistry": 2208,
+    "Mathematics": 3209
   },
   "question_type_distribution": {
-    "single_correct": 1727,
-    "numerical": 514
+    "single_correct": 5434,
+    "numerical": 2350
   },
   "year_distribution": {
+    "2020": 1795,
     "2021": 446,
-    "2020": 1795
+    "2022": 1723,
+    "2023": 1805,
+    "2024": 1540,
+    "2025": 475
   },
-  "total_distinct_chapters": 193,
-  "normalized_file": "data/question_bank/processed/jee_main_pyqs_normalized.jsonl"
+  "total_distinct_chapters": 244,
+  "merged_file": "data/question_bank/processed/jee_main_pyqs_normalized.jsonl"
 }

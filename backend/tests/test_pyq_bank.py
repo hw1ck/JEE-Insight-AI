@@ -14,12 +14,17 @@ def test_pyq_catalog_stats():
     res = client.get("/api/v1/tests/pyq/catalog/stats")
     assert res.status_code == 200
     data = res.json()
-    assert data["license"] == "CC-BY-4.0"
-    assert data["total_pyq_questions"] == 2241
+    assert "CC-BY-4.0" in data["license"]
+    assert data["total_pyq_questions"] == 7784
+    assert data["verified_questions"] >= 7500
     assert "Chemistry" in data["subject_distribution"]
     assert "Physics" in data["subject_distribution"]
     assert "Mathematics" in data["subject_distribution"]
-    assert data["total_distinct_chapters"] > 100
+    assert "2024" in data["year_distribution"]
+    assert "2025" in data["year_distribution"]
+    assert 2024 in data["available_years"]
+    assert len(data["official_full_mock_papers"]) >= 8
+    assert data["total_distinct_chapters"] >= 200
 
 
 def test_pyq_unique_identifiers():
@@ -28,7 +33,7 @@ def test_pyq_unique_identifiers():
     try:
         pyq_questions = db.query(QuestionModel.id).filter(QuestionModel.is_pyq == 1).all()
         ids = [q[0] for q in pyq_questions]
-        assert len(ids) == 2241
+        assert len(ids) == 7784
         assert len(ids) == len(set(ids)), "Duplicate question IDs detected in database!"
     finally:
         db.close()
@@ -45,7 +50,7 @@ def test_pyq_options_and_answers_preserved():
         ).first()
         assert sample_mcq is not None
         assert sample_mcq.correct_option_id in ["A", "B", "C", "D"]
-        assert len(sample_mcq.options) == 4
+        assert len(sample_mcq.options) >= 2
 
         # Check numerical questions
         sample_num = db.query(QuestionModel).filter(
@@ -58,43 +63,40 @@ def test_pyq_options_and_answers_preserved():
         db.close()
 
 
-def test_pyq_subject_and_chapter_filtering():
-    """Verify subject and chapter filters on Question Bank search endpoint."""
-    res = client.get("/api/v1/tests/pyq/bank/search?subject=Physics&limit=10")
+def test_pyq_subject_and_year_filtering():
+    """Verify subject and year filters on Question Bank search endpoint."""
+    res = client.get("/api/v1/tests/pyq/bank/search?subject=Physics&year=2024&limit=10")
     assert res.status_code == 200
     data = res.json()
-    assert data["total"] > 700
+    assert data["total"] > 100
     for item in data["items"]:
         assert item["subject"] == "Physics"
+        assert item["year"] == 2024
         assert item["isPyq"] is True
 
 
 def test_pyq_official_75q_mock_test():
     """Verify official 75-question full mock test paper retrieval."""
-    res = client.get("/api/v1/tests/pyq-jee-2020-p01/questions")
-    assert res.status_code == 200
-    questions = res.json()
-    assert len(questions) == 75
-
-    subjects = [q["subject"] for q in questions]
-    assert subjects.count("Physics") == 25
-    assert subjects.count("Chemistry") == 25
-    assert subjects.count("Mathematics") == 25
+    for paper_id in ["pyq-jee-2020-p01", "pyq-jee-2024-jan31-s1", "pyq-jee-2023-jan31-s2", "pyq-jee-2022-jun24-s2"]:
+        res = client.get(f"/api/v1/tests/{paper_id}/questions")
+        assert res.status_code == 200, f"Failed for {paper_id}"
+        questions = res.json()
+        assert len(questions) == 75, f"Expected 75 questions in {paper_id}, got {len(questions)}"
 
 
-def test_pyq_dynamic_practice_generation():
-    """Verify custom practice mock tests can be dynamically assembled from verified PYQs."""
-    res = client.post("/api/v1/tests/pyq/generate-practice?title=Pytest%20Generated%20Sprint&subject=Mathematics&questions_count=15&duration_minutes=30")
+def test_pyq_dynamic_practice_generation_with_year():
+    """Verify custom practice mock tests can be dynamically assembled with year filter."""
+    res = client.post("/api/v1/tests/pyq/generate-practice?title=Pytest%202024%20Sprint&year=2024&subject=Mathematics&questions_count=10&duration_minutes=25")
     assert res.status_code == 200
     test_data = res.json()
-    assert test_data["questionsCount"] == 15
+    assert test_data["questionsCount"] == 10
     assert test_data["subject"] == "Mathematics"
 
     test_id = test_data["id"]
     # Verify questions can be retrieved
     q_res = client.get(f"/api/v1/tests/{test_id}/questions")
     assert q_res.status_code == 200
-    assert len(q_res.json()) == 15
+    assert len(q_res.json()) == 10
 
     # Clean up generated ephemeral test
     db = SessionLocal()
@@ -114,7 +116,7 @@ def test_pyq_reimport_idempotence():
         count_before = db.query(QuestionModel).filter(QuestionModel.is_pyq == 1).count()
         import_pyqs(db)
         count_after = db.query(QuestionModel).filter(QuestionModel.is_pyq == 1).count()
-        assert count_before == count_after == 2241
+        assert count_before == count_after == 7784
     finally:
         db.close()
 

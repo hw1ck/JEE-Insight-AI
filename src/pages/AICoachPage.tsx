@@ -12,10 +12,13 @@ import {
   MessageSquare,
   Compass,
   BarChart3,
-  ExternalLink
+  ExternalLink,
+  HelpCircle,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 import { ChatMessage } from '../types';
-import { aiCoachService } from '../services/aiCoachService';
+import { aiCoachService, CoachStatusInfo } from '../services/aiCoachService';
 import { NavPage } from '../components/layout/Sidebar';
 
 interface AICoachPageProps {
@@ -30,17 +33,34 @@ export const AICoachPage: React.FC<AICoachPageProps> = ({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputVal, setInputVal] = useState<string>('');
   const [isTyping, setIsTyping] = useState<boolean>(false);
-  const [topicContext, setTopicContext] = useState<string | undefined>(initialTopicContext);
+  const [coachStatus, setCoachStatus] = useState<CoachStatusInfo | null>(null);
+
+  // Parse initial context: can be a question identifier ("question:q-id") or a topic name
+  const isQuestion = initialTopicContext?.startsWith('question:');
+  const [questionId, setQuestionId] = useState<string | undefined>(
+    isQuestion ? initialTopicContext?.slice(9) : undefined
+  );
+  const [topicContext, setTopicContext] = useState<string | undefined>(
+    !isQuestion ? initialTopicContext : undefined
+  );
+
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  const promptChips = [
-    'Explain why my score changed',
-    'Help me understand Integration',
-    'Explain my mistakes in Mock 8',
-    'Create a seven-day revision plan',
-    'Give me practice questions on Kinematics',
-    'Suggest a time-management strategy'
-  ];
+  const promptChips = questionId
+    ? [
+        'Explain the step-by-step solution',
+        'Why was my answer wrong?',
+        'Which concept or formula did I miss?',
+        'Give me a similar practice problem'
+      ]
+    : [
+        'Explain why my score changed in Mock 8',
+        'Why am I losing marks in Mathematics?',
+        'Help me understand King’s Property in Integration',
+        'Create a 2-hour daily study plan based on my weak topics',
+        'Am I accurate but slow?',
+        'Suggest a 3-round time management strategy'
+      ];
 
   const loadMessages = async () => {
     const list = await aiCoachService.getMessages();
@@ -49,6 +69,7 @@ export const AICoachPage: React.FC<AICoachPageProps> = ({
 
   useEffect(() => {
     loadMessages();
+    aiCoachService.getCoachStatus().then(st => setCoachStatus(st));
   }, []);
 
   useEffect(() => {
@@ -57,36 +78,107 @@ export const AICoachPage: React.FC<AICoachPageProps> = ({
 
   const handleSend = async (textToSend?: string) => {
     const text = textToSend || inputVal.trim();
-    if (!text) return;
+    if (!text || isTyping) return;
 
     setInputVal('');
     setIsTyping(true);
 
-    // Add user message optimistically
     const tempUserMsg: ChatMessage = {
       id: `temp-${Date.now()}`,
       sender: 'student',
       text,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      contextTopic: topicContext
+      contextTopic: topicContext,
+      questionId
     };
     setMessages(prev => [...prev, tempUserMsg]);
 
-    // Simulate realistic pedagogical reasoning delay (600ms)
-    setTimeout(async () => {
-      const { coachMsg } = await aiCoachService.sendMessage(text, topicContext);
+    try {
+      const { coachMsg } = await aiCoachService.sendMessage(text, {
+        contextTopic: topicContext,
+        questionId
+      });
       setMessages(prev => {
         const filtered = prev.filter(m => m.id !== tempUserMsg.id);
         return [...filtered, tempUserMsg, coachMsg];
       });
+    } catch (err) {
+      console.error('Failed to get coach response:', err);
+    } finally {
       setIsTyping(false);
-    }, 600);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
   };
 
   const handleClear = async () => {
     const fresh = await aiCoachService.clearChat();
     setMessages(fresh);
     setTopicContext(undefined);
+    setQuestionId(undefined);
+  };
+
+  const clearContext = () => {
+    setTopicContext(undefined);
+    setQuestionId(undefined);
+  };
+
+  // Helper to render basic markdown formatting cleanly
+  const renderFormattedText = (text: string) => {
+    const lines = text.split('\n');
+    return lines.map((line, idx) => {
+      // Heading level 3: ### Heading
+      if (line.startsWith('### ')) {
+        return (
+          <h4 key={idx} style={{ fontSize: '14px', fontWeight: 700, margin: '8px 0 4px 0', color: 'var(--text-primary)' }}>
+            {line.slice(4)}
+          </h4>
+        );
+      }
+      // Heading level 2: ## Heading
+      if (line.startsWith('## ')) {
+        return (
+          <h3 key={idx} style={{ fontSize: '15px', fontWeight: 700, margin: '10px 0 6px 0', color: 'var(--text-primary)' }}>
+            {line.slice(3)}
+          </h3>
+        );
+      }
+
+      // Format bold and backticks inline
+      const formattedLine = line.split(/(\*\*.*?\*\*|`.*?`)/).map((part, partIdx) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={partIdx}>{part.slice(2, -2)}</strong>;
+        }
+        if (part.startsWith('`') && part.endsWith('`')) {
+          return (
+            <code
+              key={partIdx}
+              style={{
+                backgroundColor: 'rgba(0, 0, 0, 0.06)',
+                padding: '2px 5px',
+                borderRadius: '4px',
+                fontFamily: 'monospace',
+                fontSize: '12px'
+              }}
+            >
+              {part.slice(1, -1)}
+            </code>
+          );
+        }
+        return part;
+      });
+
+      return (
+        <div key={idx} style={{ minHeight: line.trim() ? 'auto' : '8px', marginBottom: '2px' }}>
+          {formattedLine}
+        </div>
+      );
+    });
   };
 
   return (
@@ -103,14 +195,32 @@ export const AICoachPage: React.FC<AICoachPageProps> = ({
         }}
       >
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <h2 style={{ fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
               AI Performance Coach
             </h2>
-            <span className="badge badge-blue">Demonstration Tutor</span>
+            {coachStatus?.isLiveAiAvailable ? (
+              <span
+                className="badge badge-success"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px' }}
+                title={`Live generative AI connected via ${coachStatus.model}`}
+              >
+                <Sparkles size={12} />
+                <span>Gemini 2.5 Flash (Live AI)</span>
+              </span>
+            ) : (
+              <span
+                className="badge badge-default"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px' }}
+                title="Running on local deterministic diagnostic heuristics. Configure GEMINI_API_KEY in backend/.env to activate live Google Gemini."
+              >
+                <Bot size={12} />
+                <span>Offline Diagnostic Engine</span>
+              </span>
+            )}
           </div>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-            Pedagogical feedback, error diagnosis, and study strategy guidance tailored to your mock data.
+            Context-grounded pedagogical feedback, error diagnosis, and study guidance tailored to your verified mock data.
           </p>
         </div>
 
@@ -124,14 +234,14 @@ export const AICoachPage: React.FC<AICoachPageProps> = ({
         </button>
       </div>
 
-      {/* Topic Context Pill (if active) */}
-      {topicContext && (
+      {/* Active Context Banner (if question or topic active) */}
+      {(questionId || topicContext) && (
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            padding: '8px 14px',
+            padding: '10px 16px',
             backgroundColor: 'var(--accent-blue-light)',
             border: '1px solid var(--accent-blue-border)',
             borderRadius: '6px',
@@ -140,10 +250,16 @@ export const AICoachPage: React.FC<AICoachPageProps> = ({
             marginBottom: '16px'
           }}
         >
-          <span>Active Context: <strong>{topicContext}</strong></span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Compass size={16} />
+            <span>
+              Active Grounding Context:{' '}
+              <strong>{questionId ? `Question #${questionId}` : topicContext}</strong>
+            </span>
+          </div>
           <button
-            onClick={() => setTopicContext(undefined)}
-            style={{ color: 'var(--text-muted)', fontSize: '11px', textDecoration: 'underline' }}
+            onClick={clearContext}
+            style={{ color: 'var(--text-muted)', fontSize: '11px', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer' }}
           >
             Clear Context
           </button>
@@ -154,7 +270,7 @@ export const AICoachPage: React.FC<AICoachPageProps> = ({
       <div
         className="card"
         style={{
-          height: '520px',
+          height: '560px',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
@@ -203,7 +319,7 @@ export const AICoachPage: React.FC<AICoachPageProps> = ({
                 </div>
 
                 {/* Message Bubble */}
-                <div style={{ maxWidth: '82%' }}>
+                <div style={{ maxWidth: '85%' }}>
                   <div
                     style={{
                       padding: '14px 18px',
@@ -216,7 +332,36 @@ export const AICoachPage: React.FC<AICoachPageProps> = ({
                       boxShadow: 'var(--shadow-xs)'
                     }}
                   >
-                    <div style={{ whiteSpace: 'pre-line' }}>{msg.text}</div>
+                    <div>{renderFormattedText(msg.text)}</div>
+
+                    {/* Disclaimer / Model tag for coach responses */}
+                    {isCoach && (
+                      <div
+                        style={{
+                          marginTop: '8px',
+                          paddingTop: '6px',
+                          borderTop: '1px solid var(--border-subtle)',
+                          fontSize: '10px',
+                          color: 'var(--text-muted)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          flexWrap: 'wrap',
+                          gap: '6px'
+                        }}
+                      >
+                        <span>
+                          Engine: {msg.modelUsed || (msg.isSimulated ? 'Offline Diagnostic Engine' : 'Google Gemini 2.5 Flash')}
+                        </span>
+                        {msg.sourceSummary && <span>Grounding: {msg.sourceSummary}</span>}
+                      </div>
+                    )}
+
+                    {isCoach && msg.disclaimer && (
+                      <div style={{ fontSize: '10px', color: '#b45309', marginTop: '4px', fontStyle: 'italic' }}>
+                        {msg.disclaimer}
+                      </div>
+                    )}
 
                     {/* Interactive Action Links inside coach message */}
                     {isCoach && msg.actionLinks && msg.actionLinks.length > 0 && (
@@ -260,7 +405,8 @@ export const AICoachPage: React.FC<AICoachPageProps> = ({
                     }}
                   >
                     <span>{msg.timestamp}</span>
-                    {msg.contextTopic && <span>• Context: {msg.contextTopic}</span>}
+                    {msg.questionId && <span>• Question: {msg.questionId}</span>}
+                    {msg.contextTopic && <span>• Topic: {msg.contextTopic}</span>}
                   </div>
 
                   {/* Suggestion follow-up prompt buttons */}
@@ -317,7 +463,8 @@ export const AICoachPage: React.FC<AICoachPageProps> = ({
                   gap: '6px'
                 }}
               >
-                <span>Analyzing student mock diagnostics & performance patterns...</span>
+                <Sparkles size={14} className="animate-spin" color="var(--accent-primary)" />
+                <span>Synthesizing student mock diagnostics & pedagogic solution...</span>
               </div>
             </div>
           )}
@@ -325,39 +472,40 @@ export const AICoachPage: React.FC<AICoachPageProps> = ({
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Bar */}
+        {/* Multiline Input Bar */}
         <div
           style={{
-            padding: '14px 20px',
+            padding: '12px 18px',
             borderTop: '1px solid var(--border-default)',
             backgroundColor: 'var(--bg-surface)'
           }}
         >
-          <form
-            onSubmit={e => {
-              e.preventDefault();
-              handleSend();
-            }}
-            style={{ display: 'flex', gap: '10px' }}
-          >
-            <input
-              type="text"
-              placeholder="Ask AI Coach (e.g., 'How to improve Integration?' or 'Analyze my Mock 8 mistakes')..."
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-end' }}>
+            <textarea
+              placeholder="Ask AI Coach (e.g., 'Explain King's property in Integration' or 'Analyze my Mock 8 mistakes'). Press Enter to send, Shift+Enter for new line."
               value={inputVal}
               onChange={e => setInputVal(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={2}
               className="input-control"
-              style={{ flex: 1 }}
+              style={{
+                flex: 1,
+                resize: 'none',
+                fontFamily: 'inherit',
+                fontSize: '13px',
+                padding: '8px 12px'
+              }}
             />
             <button
-              type="submit"
+              onClick={() => handleSend()}
               disabled={!inputVal.trim() || isTyping}
               className="btn btn-primary"
-              style={{ padding: '8px 18px', gap: '6px' }}
+              style={{ padding: '10px 18px', gap: '6px', height: '42px' }}
             >
               <span>Send</span>
               <Send size={14} />
             </button>
-          </form>
+          </div>
         </div>
       </div>
 
@@ -383,3 +531,4 @@ export const AICoachPage: React.FC<AICoachPageProps> = ({
     </div>
   );
 };
+

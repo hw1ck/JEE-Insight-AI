@@ -68,6 +68,48 @@ def start_attempt(
     }
 
 
+@router.get("/{attempt_id}/state")
+def get_attempt_state(
+    attempt_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Returns authoritative recovery state for an in-progress CBT attempt:
+    elapsed seconds, remaining seconds, status, and saved question responses.
+    Allows CBT session recovery without losing student answers or duplicating submissions.
+    """
+    attempt = db.query(TestAttemptModel).filter_by(id=attempt_id).first()
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Attempt not found.")
+
+    test = db.query(MockTestModel).filter_by(id=attempt.test_id).first()
+    duration_seconds = (test.duration_minutes * 60) if test else 10800
+
+    now = datetime.utcnow()
+    elapsed = int((now - attempt.start_time).total_seconds()) if attempt.start_time else 0
+    remaining_seconds = max(0, duration_seconds - elapsed)
+
+    responses = db.query(AttemptResponseModel).filter_by(attempt_id=attempt.id).all()
+    resp_dict = {}
+    for r in responses:
+        resp_dict[r.question_id] = {
+            "selectedOption": r.selected_option,
+            "markedForReview": r.marked_for_review,
+            "timeSpentSeconds": r.time_spent_seconds
+        }
+
+    return {
+        "attemptId": attempt.id,
+        "testId": attempt.test_id,
+        "testTitle": attempt.test_title,
+        "status": attempt.status,
+        "startTime": attempt.start_time.isoformat() if attempt.start_time else None,
+        "elapsedSeconds": elapsed,
+        "remainingSeconds": remaining_seconds,
+        "responses": resp_dict
+    }
+
+
 @router.post("/{attempt_id}/response")
 def record_question_response(
     attempt_id: str,
@@ -260,8 +302,65 @@ def submit_attempt(
     return _format_attempt_response(attempt, db)
 
 
+@router.get("/{attempt_id}/state")
+def get_attempt_state(attempt_id: str, db: Session = Depends(get_db)):
+    """
+    Authoritative attempt state recovery endpoint for active CBT examinations.
+    Recovers in-progress attempts after browser refresh or network interruption without duplicate submissions.
+    """
+    attempt = db.query(TestAttemptModel).filter_by(id=attempt_id).first()
+    if not attempt:
+        raise HTTPException(status_code=404, detail=f"Attempt '{attempt_id}' not found.")
+
+    if attempt.status == "completed":
+        return {
+            "status": "completed",
+            "attemptId": attempt.id,
+            "testId": attempt.test_id,
+            "testTitle": attempt.test_title,
+            "score": attempt.score,
+            "totalMarks": attempt.total_marks,
+            "accuracy": attempt.accuracy,
+            "submissionTime": attempt.submission_time.isoformat() if attempt.submission_time else None,
+            "isCompleted": True
+        }
+
+    test = db.query(MockTestModel).filter_by(id=attempt.test_id).first()
+    duration_mins = test.duration_minutes if test else 180
+    duration_seconds = duration_mins * 60
+    elapsed_seconds = int((datetime.utcnow() - attempt.start_time).total_seconds()) if attempt.start_time else 0
+    remaining_seconds = max(0, duration_seconds - elapsed_seconds)
+
+    # Fetch recorded responses
+    responses = db.query(AttemptResponseModel).filter_by(attempt_id=attempt.id).all()
+    resp_map = {
+        r.question_id: {
+            "selectedOption": r.selected_option,
+            "markedForReview": r.marked_for_review,
+            "timeSpentSeconds": r.time_spent_seconds or 0
+        }
+        for r in responses
+    }
+
+    return {
+        "status": "in_progress",
+        "attemptId": attempt.id,
+        "testId": attempt.test_id,
+        "testTitle": attempt.test_title,
+        "startTime": attempt.start_time.isoformat() if attempt.start_time else None,
+        "elapsedSeconds": elapsed_seconds,
+        "durationMinutes": duration_mins,
+        "remainingSeconds": remaining_seconds,
+        "isExpired": remaining_seconds == 0 and elapsed_seconds > (duration_seconds + 300),
+        "responses": resp_map,
+        "answeredCount": sum(1 for r in responses if r.selected_option is not None and str(r.selected_option).strip() != ""),
+        "markedForReviewCount": sum(1 for r in responses if r.marked_for_review)
+    }
+
+
 @router.get("/{attempt_id}", response_model=TestAttemptResponse)
 def get_attempt_result(attempt_id: str, db: Session = Depends(get_db)):
+
     """Retrieve full diagnostic breakdown and question review for an attempt."""
     attempt = db.query(TestAttemptModel).filter_by(id=attempt_id).first()
     if not attempt:

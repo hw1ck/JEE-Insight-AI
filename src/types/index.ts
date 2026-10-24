@@ -173,6 +173,12 @@ export interface ChatMessage {
   text: string;
   timestamp: string;
   contextTopic?: string;
+  questionId?: string;
+  attemptId?: string;
+  isSimulated?: boolean;
+  modelUsed?: string;
+  sourceSummary?: string;
+  disclaimer?: string;
   actionSuggestions?: string[];
   actionLinks?: {
     label: string;
@@ -180,6 +186,14 @@ export interface ChatMessage {
     context?: string;
   }[];
 }
+
+export interface CoachStatus {
+  isLiveAiAvailable: boolean;
+  model: string;
+  provider: string;
+  contextSourcesAvailable: string[];
+}
+
 
 export interface HistoricalMockRecord {
   id: string;

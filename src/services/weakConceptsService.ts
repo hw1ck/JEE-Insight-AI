@@ -12,7 +12,8 @@ export interface IWeakConceptsService {
     sortBy?: 'accuracy-asc' | 'accuracy-desc' | 'attempts-desc' | 'time-desc' | 'priority';
   }): Promise<TopicPerformance[]>;
   getTopicById(id: string): Promise<TopicPerformance | null>;
-  getSampleQuestionsForTopic(topic: string): Promise<Question[]>;
+  getSampleQuestionsForTopic(topic: string, subject?: string): Promise<Question[]>;
+  evaluatePracticeAnswer(questionId: string, answerOrOption?: string | { selectedOption?: string | null; numericalAnswer?: any }, numericalVal?: string | number): Promise<any>;
 }
 
 class LocalWeakConceptsService implements IWeakConceptsService {
@@ -94,12 +95,23 @@ class LocalWeakConceptsService implements IWeakConceptsService {
     return item ? { ...item } : null;
   }
 
-  async getSampleQuestionsForTopic(topic: string): Promise<Question[]> {
+  async getSampleQuestionsForTopic(topic: string, _subject?: string): Promise<Question[]> {
     const allPool = [...SAMPLE_QUESTIONS_MOCK_09, ...SAMPLE_QUESTIONS_MATH_SEC];
     const matched = allPool.filter(q => q.topic.toLowerCase().includes(topic.toLowerCase()) || topic.toLowerCase().includes(q.topic.toLowerCase()));
-    if (matched.length > 0) return matched.slice(0, 3);
-    // Fallback to questions with same subject
-    return allPool.slice(0, 2);
+    return matched.slice(0, 3);
+  }
+
+  async evaluatePracticeAnswer(questionId: string, answer: { selectedOption?: string | null; numericalAnswer?: string | null }) {
+    const allPool = [...SAMPLE_QUESTIONS_MOCK_09, ...SAMPLE_QUESTIONS_MATH_SEC];
+    const q = allPool.find(item => item.id === questionId);
+    const isCorrect = q ? q.correctOptionId === answer.selectedOption : true;
+    return {
+      questionId,
+      isCorrect,
+      marksAwarded: isCorrect ? 4 : -1,
+      correctOptionId: q?.correctOptionId,
+      explanation: q?.explanation || 'Solution preview in offline mode.'
+    };
   }
 }
 
@@ -171,9 +183,63 @@ class HybridWeakConceptsService implements IWeakConceptsService {
     return item ? { ...item } : null;
   }
 
-  async getSampleQuestionsForTopic(topic: string): Promise<Question[]> {
-    return this.localService.getSampleQuestionsForTopic(topic);
+  async getSampleQuestionsForTopic(topic: string, subject?: string): Promise<Question[]> {
+    try {
+      if (await apiClient.isBackendAvailable()) {
+        const resp = await apiClient.searchQuestions({ topic, subject, limit: 5 });
+        if (resp && resp.items && resp.items.length > 0) {
+          return resp.items.map((q: any) => ({
+            id: q.id,
+            testId: q.testId || 'practice-drill',
+            questionNumber: q.questionNumber || 1,
+            subject: q.subject,
+            topic: q.topic || topic,
+            statement: q.statement,
+            options: (q.options || []).map((o: any) => ({ id: o.id, text: o.text })),
+            correctOptionId: q.correctOptionId,
+            explanation: q.explanation || 'Step-by-step solution available after check.',
+            difficulty: q.difficulty || 'Moderate',
+            positiveMarks: q.positiveMarks || 4,
+            negativeMarks: q.negativeMarks || -1,
+            questionType: q.questionType || 'single_correct',
+            numericalAnswer: q.numericalAnswer
+          }));
+        }
+        // Return explicit empty list so empty state can be rendered. Never substitute unrelated questions!
+        return [];
+      }
+    } catch (err) {
+      console.warn('Backend question retrieval failed for topic:', topic, err);
+    }
+    return this.localService.getSampleQuestionsForTopic(topic, subject);
+  }
+
+  async evaluatePracticeAnswer(
+    questionId: string,
+    answerOrOption?: string | { selectedOption?: string | null; numericalAnswer?: any },
+    numericalVal?: string | number
+  ) {
+    const payload = typeof answerOrOption === 'object' && answerOrOption !== null
+      ? answerOrOption
+      : {
+          selectedOption: typeof answerOrOption === 'string' ? answerOrOption : null,
+          numericalAnswer: numericalVal !== undefined ? String(numericalVal) : null
+        };
+
+    try {
+      if (await apiClient.isBackendAvailable()) {
+        return await apiClient.evaluateQuestionAnswer({
+          questionId,
+          selectedOption: payload.selectedOption || undefined,
+          numericalAnswer: payload.numericalAnswer || undefined
+        });
+      }
+    } catch (err) {
+      console.warn('Backend evaluation failed, falling back to local check:', err);
+    }
+    return this.localService.evaluatePracticeAnswer(questionId, payload);
   }
 }
 
 export const weakConceptsService: IWeakConceptsService = new HybridWeakConceptsService();
+

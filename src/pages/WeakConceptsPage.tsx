@@ -22,6 +22,7 @@ import { weakConceptsService } from '../services/weakConceptsService';
 import { studyPlannerService } from '../services/studyPlannerService';
 import { Modal } from '../components/common/Modal';
 import { ProgressBar } from '../components/common/ProgressBar';
+import { MathRenderer } from '../components/common/MathRenderer';
 import { NavPage } from '../components/layout/Sidebar';
 
 interface WeakConceptsPageProps {
@@ -39,6 +40,16 @@ export const WeakConceptsPage: React.FC<WeakConceptsPageProps> = ({ onNavigate }
   const [activeTopic, setActiveTopic] = useState<TopicPerformance | null>(null);
   const [topicQuestions, setTopicQuestions] = useState<Question[]>([]);
   const [addedNotice, setAddedNotice] = useState<string | null>(null);
+  const [activeQuestionIdx, setActiveQuestionIdx] = useState<number>(0);
+  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
+  const [numericalInput, setNumericalInput] = useState<string>('');
+  const [evalResult, setEvalResult] = useState<{
+    is_correct: boolean;
+    marks_awarded: number;
+    correct_answer: string;
+    explanation?: string;
+  } | null>(null);
+  const [isEvaluating, setIsEvaluating] = useState<boolean>(false);
 
   const loadTopics = () => {
     weakConceptsService
@@ -57,8 +68,29 @@ export const WeakConceptsPage: React.FC<WeakConceptsPageProps> = ({ onNavigate }
 
   const handleOpenTopic = async (topic: TopicPerformance) => {
     setActiveTopic(topic);
+    setActiveQuestionIdx(0);
+    setSelectedOptionId(null);
+    setNumericalInput('');
+    setEvalResult(null);
     const qs = await weakConceptsService.getSampleQuestionsForTopic(topic.topic);
     setTopicQuestions(qs);
+  };
+
+  const handleEvaluate = async (q: Question) => {
+    if (!selectedOptionId && !numericalInput.trim()) return;
+    setIsEvaluating(true);
+    try {
+      const res = await weakConceptsService.evaluatePracticeAnswer(
+        q.id,
+        selectedOptionId || undefined,
+        numericalInput.trim() ? parseFloat(numericalInput.trim()) : undefined
+      );
+      setEvalResult(res);
+    } catch (e) {
+      console.error('Failed to evaluate practice answer', e);
+    } finally {
+      setIsEvaluating(false);
+    }
   };
 
   const handleAddTopicToPlanner = async (topic: TopicPerformance) => {
@@ -347,41 +379,211 @@ export const WeakConceptsPage: React.FC<WeakConceptsPageProps> = ({ onNavigate }
               </div>
             </div>
 
-            {/* Sample Question Inspection */}
-            {topicQuestions.length > 0 && (
-              <div>
-                <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>
-                  Sample Examination Question Pattern:
+            {/* Sample Question Inspection & Interactive Practice */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <h4 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  Interactive Practice & Concept Drill ({topicQuestions.length} Questions Available)
                 </h4>
-                {topicQuestions.slice(0, 1).map(q => (
-                  <div key={q.id} style={{ padding: '14px', borderRadius: '8px', border: '1px solid var(--border-default)', backgroundColor: 'var(--bg-surface-subtle)', fontSize: '12px' }}>
-                    <p style={{ fontWeight: 500, marginBottom: '10px', color: 'var(--text-primary)', lineHeight: 1.5 }}>
-                      {q.statement}
-                    </p>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginBottom: '10px' }}>
-                      {q.options.map(opt => (
+                {topicQuestions.length > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '2px 8px', fontSize: '11px' }}
+                      disabled={activeQuestionIdx === 0}
+                      onClick={() => {
+                        setActiveQuestionIdx(prev => Math.max(0, prev - 1));
+                        setSelectedOptionId(null);
+                        setNumericalInput('');
+                        setEvalResult(null);
+                      }}
+                    >
+                      Previous
+                    </button>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      {activeQuestionIdx + 1} / {topicQuestions.length}
+                    </span>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      style={{ padding: '2px 8px', fontSize: '11px' }}
+                      disabled={activeQuestionIdx >= topicQuestions.length - 1}
+                      onClick={() => {
+                        setActiveQuestionIdx(prev => Math.min(topicQuestions.length - 1, prev + 1));
+                        setSelectedOptionId(null);
+                        setNumericalInput('');
+                        setEvalResult(null);
+                      }}
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {topicQuestions.length === 0 ? (
+                <div
+                  style={{
+                    padding: '20px',
+                    textAlign: 'center',
+                    background: 'var(--bg-app)',
+                    borderRadius: '8px',
+                    border: '1px dashed var(--border-default)'
+                  }}
+                >
+                  <HelpCircle size={26} color="var(--text-muted)" style={{ margin: '0 auto 6px', display: 'block' }} />
+                  <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)', marginBottom: '4px' }}>
+                    No Direct PYQ Question Cataloged for "{activeTopic.topic}"
+                  </div>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', maxWidth: '480px', margin: '0 auto', lineHeight: 1.5 }}>
+                    This weak area was inferred from multi-concept test telemetry. You can schedule dedicated revision in your Study Planner or ask the AI Coach for tailored problem patterns.
+                  </p>
+                </div>
+              ) : (
+                (() => {
+                  const q = topicQuestions[activeQuestionIdx] || topicQuestions[0];
+                  const isNumerical = !q.options || q.options.length === 0;
+
+                  return (
+                    <div
+                      key={q.id}
+                      style={{
+                        padding: '16px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border-default)',
+                        backgroundColor: 'var(--bg-surface-subtle)',
+                        fontSize: '12px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', fontSize: '11px', color: 'var(--text-muted)' }}>
+                        <span>PYQ ID: {q.id}</span>
+                        <span>{isNumerical ? 'Numerical Question (+4 / 0)' : 'Single Correct MCQ (+4 / -1)'}</span>
+                      </div>
+
+                      <div style={{ fontWeight: 500, marginBottom: '14px', color: 'var(--text-primary)', lineHeight: 1.6 }}>
+                        <MathRenderer text={q.statement} />
+                      </div>
+
+                      {!isNumerical ? (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '14px' }}>
+                          {q.options.map(opt => {
+                            const isSelected = selectedOptionId === opt.id;
+                            let cardBg = isSelected ? 'var(--accent-blue-light)' : 'var(--bg-surface)';
+                            let cardBorder = isSelected ? 'var(--accent-blue)' : 'var(--border-subtle)';
+                            let textColor = isSelected ? 'var(--accent-blue)' : 'var(--text-secondary)';
+
+                            if (evalResult) {
+                              if (opt.id === evalResult.correct_answer) {
+                                cardBg = 'var(--success-bg)';
+                                cardBorder = 'var(--success-border)';
+                                textColor = 'var(--success)';
+                              } else if (isSelected && !evalResult.is_correct) {
+                                cardBg = 'var(--danger-bg)';
+                                cardBorder = 'var(--danger-border)';
+                                textColor = 'var(--danger)';
+                              }
+                            }
+
+                            return (
+                              <button
+                                key={opt.id}
+                                type="button"
+                                onClick={() => {
+                                  if (!evalResult) {
+                                    setSelectedOptionId(opt.id);
+                                  }
+                                }}
+                                style={{
+                                  padding: '10px 12px',
+                                  borderRadius: '6px',
+                                  backgroundColor: cardBg,
+                                  border: `1px solid ${cardBorder}`,
+                                  color: textColor,
+                                  fontWeight: isSelected || (evalResult && opt.id === evalResult.correct_answer) ? 600 : 400,
+                                  cursor: evalResult ? 'default' : 'pointer',
+                                  textAlign: 'left',
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                <strong>{opt.id}.</strong> <MathRenderer text={opt.text} />
+                                {evalResult && opt.id === evalResult.correct_answer && ' ✓ (Key)'}
+                                {evalResult && isSelected && !evalResult.is_correct && ' ✗'}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                          <input
+                            type="text"
+                            placeholder="Enter numerical value..."
+                            value={numericalInput}
+                            disabled={evalResult !== null}
+                            onChange={e => setNumericalInput(e.target.value)}
+                            className="input-control"
+                            style={{ width: '220px' }}
+                          />
+                        </div>
+                      )}
+
+                      {/* Evaluation Control & Results */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        {!evalResult ? (
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            disabled={isEvaluating || (!selectedOptionId && !numericalInput.trim())}
+                            onClick={() => handleEvaluate(q)}
+                          >
+                            {isEvaluating ? 'Evaluating on Server...' : 'Verify Answer'}
+                          </button>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', flexWrap: 'wrap' }}>
+                            <span
+                              className={`badge ${evalResult.is_correct ? 'badge-success' : 'badge-danger'}`}
+                              style={{ padding: '6px 12px', fontSize: '12px' }}
+                            >
+                              {evalResult.is_correct
+                                ? `Correct! Awarded +${evalResult.marks_awarded}`
+                                : `Incorrect (${evalResult.marks_awarded > 0 ? '+' : ''}${evalResult.marks_awarded}). Correct Key: ${evalResult.correct_answer}`}
+                            </span>
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              onClick={() => {
+                                setEvalResult(null);
+                                setSelectedOptionId(null);
+                                setNumericalInput('');
+                              }}
+                            >
+                              Retry Question
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {evalResult && q.explanation && (
                         <div
-                          key={opt.id}
                           style={{
-                            padding: '6px 10px',
-                            borderRadius: '4px',
-                            backgroundColor: opt.id === q.correctOptionId ? 'var(--success-bg)' : 'var(--bg-surface)',
-                            border: `1px solid ${opt.id === q.correctOptionId ? 'var(--success-border)' : 'var(--border-subtle)'}`,
-                            color: opt.id === q.correctOptionId ? 'var(--success)' : 'var(--text-secondary)',
-                            fontWeight: opt.id === q.correctOptionId ? 600 : 400
+                            marginTop: '12px',
+                            padding: '10px 12px',
+                            borderRadius: '6px',
+                            backgroundColor: 'var(--bg-app)',
+                            border: '1px solid var(--border-subtle)',
+                            color: 'var(--text-secondary)',
+                            lineHeight: 1.5
                           }}
                         >
-                          <strong>{opt.id}.</strong> {opt.text} {opt.id === q.correctOptionId && '✓ (Key)'}
+                          <strong style={{ color: 'var(--text-primary)' }}>Official Solution Note:</strong>
+                          <div style={{ marginTop: '4px' }}>
+                            <MathRenderer text={q.explanation} />
+                          </div>
                         </div>
-                      ))}
+                      )}
                     </div>
-                    <div style={{ color: 'var(--text-muted)', lineHeight: 1.4 }}>
-                      <strong>Solution Note:</strong> {q.explanation}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  );
+                })()
+              )}
+            </div>
 
             {/* Action Buttons */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '12px', borderTop: '1px solid var(--border-default)' }}>

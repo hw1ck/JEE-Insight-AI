@@ -1,0 +1,74 @@
+[
+  {
+    "source_name": "ruh-ai/grafite-jee-mains-qna-no-img",
+    "source_url": "https://huggingface.co/datasets/ruh-ai/grafite-jee-mains-qna-no-img/resolve/main/filtered_dataset.csv",
+    "publisher": "Ruh AI / Grafite",
+    "license": "Apache-2.0",
+    "target_file": "data/question_bank/raw/jee_mains_2022_2024_grafite.csv",
+    "file_size_bytes": 15857204,
+    "sha256": "97a1a6fcb6589ba7aade3700c4f26e037c59940ca6067f7c1e418d5e543e9631",
+    "years_covered": [
+      2022,
+      2023,
+      2024
+    ],
+    "retrieval_date": "2026-10-17 04:47:15 UTC",
+    "status": "DOWNLOADED_AND_VERIFIED"
+  },
+  {
+    "source_name": "PhysicsWallahAI/JEE-Main-2025-Math-Jan",
+    "source_url": "https://huggingface.co/datasets/PhysicsWallahAI/JEE-Main-2025-Math/resolve/main/main2025-jan.jsonl",
+    "publisher": "PhysicsWallah AI Research",
+    "license": "Apache-2.0 / Open Access",
+    "target_file": "data/question_bank/raw/2025/main2025-jan-math.jsonl",
+    "file_size_bytes": 100251,
+    "sha256": "dd1d373bdadc010aba539bad9a21527a1f82a96c4436b8212462e292fd5fb553",
+    "years_covered": [
+      2025
+    ],
+    "retrieval_date": "2026-10-17 04:47:15 UTC",
+    "status": "DOWNLOADED_AND_VERIFIED"
+  },
+  {
+    "source_name": "PhysicsWallahAI/JEE-Main-2025-Math-Apr",
+    "source_url": "https://huggingface.co/datasets/PhysicsWallahAI/JEE-Main-2025-Math/resolve/main/main2025-apr.jsonl",
+    "publisher": "PhysicsWallah AI Research",
+    "license": "Apache-2.0 / Open Access",
+    "target_file": "data/question_bank/raw/2025/main2025-apr-math.jsonl",
+    "file_size_bytes": 87509,
+    "sha256": "f413e22af6ec6e51faa838bdfa24a67b495e3c291e2f409b61d2c16a2146313b",
+    "years_covered": [
+      2025
+    ],
+    "retrieval_date": "2026-10-17 04:47:16 UTC",
+    "status": "DOWNLOADED_AND_VERIFIED"
+  },
+  {
+    "source_name": "CK0607/2025-Jee-Mains-Question",
+    "source_url": "https://huggingface.co/datasets/CK0607/2025-Jee-Mains-Question/resolve/main/math_with_uuid.csv",
+    "publisher": "CK0607",
+    "license": "Apache-2.0",
+    "target_file": "data/question_bank/raw/2025/jee_2025_jan_shifts_math.csv",
+    "file_size_bytes": 93013,
+    "sha256": "1febdee8664f11bf7e934a42181de01e45870e789dcb25100c610bf39899db36",
+    "years_covered": [
+      2025
+    ],
+    "retrieval_date": "2026-10-17 04:47:16 UTC",
+    "status": "DOWNLOADED_AND_VERIFIED"
+  },
+  {
+    "source_name": "EduDevCommons/JEE-Mains-Dataset-2026",
+    "source_url": "https://huggingface.co/datasets/samyakbayar/JEEMainsDataset/resolve/main/jee_2026_shift_analysis.csv",
+    "publisher": "Samyakraj Bayar / EduDevCommons",
+    "license": "MIT",
+    "target_file": "data/question_bank/raw/2026/jee_2026_shift_analysis.csv",
+    "file_size_bytes": 576,
+    "sha256": "13a1703f6fd0192c49258f33ef1b53be55d0a621c16b77a119cbf3f1a094fa79",
+    "years_covered": [
+      2026
+    ],
+    "retrieval_date": "2026-10-17 04:47:17 UTC",
+    "status": "DOWNLOADED_AND_VERIFIED"
+  }
+]

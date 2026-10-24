@@ -44,38 +44,46 @@ class LocalScoreSimulatorService implements IScoreSimulatorService {
     const totalDelta = fromAccuracy + fromNegativeReduction + fromExtraPractice + fromSpeedReallocation;
     const estimatedScore = Math.min(300, Math.max(0, baselineScore + totalDelta));
 
-    // Historical JEE Main Percentile & Rank Bracket Lookups (Heuristic)
-    let estimatedRankBand = 'AIR 95,000 - 1,15,000';
-    let estimatedPercentile = '92.5 - 93.8 %ile';
+    // Empirical JEE Main 2026 Session 1 (21-28 Jan 2026) Shift Distribution Calibration
+    // Across 10 actual shifts:
+    // 99.9 %ile: 219 (Toughest - 22 Jan S2) to 243 (Easiest - 22 Jan S1) [Mean: 228.8]
+    // 99.0 %ile: 153 (Toughest) to 186 (Easiest) [Mean: 168.3]
+    // 95.0 %ile: 99 (Toughest) to 129 (Easiest) [Mean: 113.4]
+    let estimatedRankBand = 'AIR 95,000 - 1,35,000';
+    let estimatedPercentile = '88.5 - 92.5 %ile (Empirical 2026 Shift Median)';
 
-    if (estimatedScore >= 240) {
-      estimatedRankBand = 'AIR 800 - 2,500 (Top NIT CSE / IIIT-H)';
-      estimatedPercentile = '99.5 - 99.8 %ile';
-    } else if (estimatedScore >= 210) {
-      estimatedRankBand = 'AIR 2,500 - 6,500 (Top NITs Electrical / CSE)';
-      estimatedPercentile = '98.8 - 99.4 %ile';
-    } else if (estimatedScore >= 180) {
-      estimatedRankBand = 'AIR 8,000 - 16,000 (Established NIT Core Branches)';
-      estimatedPercentile = '97.5 - 98.6 %ile';
-    } else if (estimatedScore >= 150) {
-      estimatedRankBand = 'AIR 22,000 - 38,000 (Top State Colleges / Middle NITs)';
-      estimatedPercentile = '95.2 - 97.2 %ile';
-    } else if (estimatedScore >= 130) {
-      estimatedRankBand = 'AIR 45,000 - 70,000 (Qualifying Comfortably)';
-      estimatedPercentile = '93.5 - 95.0 %ile';
-    } else if (estimatedScore < 100) {
-      estimatedRankBand = 'AIR 1,20,000 - 1,60,000';
-      estimatedPercentile = '85.0 - 90.0 %ile';
+    if (estimatedScore >= 235) {
+      estimatedRankBand = 'AIR 500 - 1,800 (Top NIT CSE / IIIT-H / IIT Qualification)';
+      estimatedPercentile = '99.8 - 99.95 %ile (2026 Shift 1/2 Benchmark)';
+    } else if (estimatedScore >= 200) {
+      estimatedRankBand = 'AIR 2,000 - 5,500 (Top NITs Electrical / ECE / CSE)';
+      estimatedPercentile = '99.2 - 99.7 %ile (2026 Session 1 Benchmark)';
+    } else if (estimatedScore >= 168) {
+      estimatedRankBand = 'AIR 6,000 - 14,000 (Established NIT Core Branches)';
+      estimatedPercentile = '98.8 - 99.2 %ile (2026 Mean 99%ile: 168.3 marks)';
+    } else if (estimatedScore >= 140) {
+      estimatedRankBand = 'AIR 18,000 - 32,000 (Top State Colleges / Middle NITs)';
+      estimatedPercentile = '96.8 - 98.2 %ile (2026 Shift Median)';
+    } else if (estimatedScore >= 113) {
+      estimatedRankBand = 'AIR 38,000 - 65,000 (Qualifying Comfortably)';
+      estimatedPercentile = '94.8 - 96.5 %ile (2026 Mean 95%ile: 113.4 marks)';
+    } else if (estimatedScore >= 90) {
+      estimatedRankBand = 'AIR 70,000 - 1,10,000';
+      estimatedPercentile = '91.0 - 94.0 %ile';
+    } else {
+      estimatedRankBand = 'AIR 1,30,000+';
+      estimatedPercentile = '< 90.0 %ile';
     }
 
     const assumptions = [
-      `Mathematics accuracy improvement of +${inputs.mathAccuracyDelta}% assumes converting indifferently guessed Calculus and Algebra problems into verified steps (+${fromAccuracyMath} marks).`,
-      `Chemistry accuracy improvement of +${inputs.chemAccuracyDelta}% assumes systematic review of Organic Reaction Mechanisms and Equilibrium (+${fromAccuracyChem} marks).`,
-      `Physics accuracy improvement of +${inputs.physicsAccuracyDelta}% assumes eliminating torque axis and inclined plane relative errors (+${fromAccuracyPhys} marks).`,
-      `Eliminating ${inputs.negativeMarksSaved} blind guesses removes the -1 negative marking penalty without requiring any additional syllabus coverage (+${fromNegativeReduction} marks).`,
-      `${inputs.extraWeeklyHours} additional practice hours provides approximately ${inputs.extraWeeklyHours * 15} additional solved problems per week (+${fromExtraPractice} marks).`,
-      `Pacing improvement of ${inputs.speedOptimizationSec}s in Physics and Chemistry reallocates critical cognitive bandwidth to complex Mathematics calculations (+${fromSpeedReallocation} marks).`,
-      `All projections enforce the theoretical JEE Main ceiling of 300 maximum marks.`
+      `Empirical 2026 Calibration: Percentile bounds are cross-referenced with all 10 shifts from NTA JEE Main Session 1 (21–28 January 2026), where mean 95%ile was 113.4 marks and mean 99%ile was 168.3 marks.`,
+      `Mathematics accuracy improvement (+${inputs.mathAccuracyDelta}%): Assumes systematic conversion of borderline Calculus/Algebra questions (+${fromAccuracyMath} marks).`,
+      `Chemistry accuracy improvement (+${inputs.chemAccuracyDelta}%): Assumes review of Organic Mechanisms & Physical Equilibrium (+${fromAccuracyChem} marks).`,
+      `Physics accuracy improvement (+${inputs.physicsAccuracyDelta}%): Eliminates common sign/axis errors in Mechanics & Electrodynamics (+${fromAccuracyPhys} marks).`,
+      `Negative mark elimination: Skipping ${inputs.negativeMarksSaved} blind guesses preserves +${fromNegativeReduction} marks (+1 raw per avoided penalty).`,
+      `Focused practice: ${inputs.extraWeeklyHours} weekly hours yields ~${inputs.extraWeeklyHours * 15} solved problems (+${fromExtraPractice} marks).`,
+      `Pacing optimization: Saving ${inputs.speedOptimizationSec}s in Physics/Chemistry frees cognitive bandwidth for multi-step Mathematics (+${fromSpeedReallocation} marks).`,
+      `Methodological Limitation: Deterministic mathematical model assuming linear independence. Does not account for test-day anxiety, negative variance, or future shift normalization volatility.`
     ];
 
     return {

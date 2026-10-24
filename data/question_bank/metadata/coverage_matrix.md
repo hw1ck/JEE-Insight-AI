@@ -1,72 +1,57 @@
-# JEE InsightAI — PYQ Dataset Coverage Matrix & Quality Audit
+# JEE InsightAI — Expanded PYQ Dataset Coverage Matrix & Quality Audit (2020–2026)
 
-**Audit Generated**: Automatically by `scripts/audit_pyq_dataset.py`
-**Total Imported Questions**: 2241
-**Unique Question Identifiers**: 2241 (Duplicates: 0)
-**Provenanced & Licensed (CC-BY-4.0)**: 2241 / 2241 (100.0%)
-**Verified High-Integrity Records**: 1962 (87.6%)
-
----
-
-## 1. Subject-Wise Breakdown
-
-| Subject | Total Questions | Single-Correct MCQ | Numerical | Has Diagrams | Verified |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Physics** | 757 | ~582 | ~174 | Yes | 666 |
-| **Chemistry** | 731 | ~562 | ~168 | Yes | 643 |
-| **Mathematics** | 753 | ~579 | ~173 | Yes | 662 |
-| **TOTAL** | **2241** | **1727** | **514** | **1344** | **1962** |
+**Last Audit Generated**: Post-Ingestion Verification (Phase 10)  
+**Total Questions in Database**: **7,824**  
+**Total Authentic JEE Main PYQs**: **7,784**  
+**Baseline Questions (Pre-Expansion)**: 2,241 (Years 2020 & 2021)  
+**Newly Added Questions (Expansion)**: 5,543 (Years 2022, 2023, 2024 & 2025)  
+**Verified Answers**: 7,505 (96.4%)  
+**Needs Review / Ambiguous**: 279 (3.6%)  
+**Total Distinct Chapters Covered**: 244  
+**Full-Length 75-Q Official Mock Papers**: 8 Full Papers  
 
 ---
 
-## 2. Difficulty Distribution
+## 1. Multi-Year Examination Coverage Summary
 
-- **Easy**: 386 (17.2%)
-- **Medium / Moderate**: 1476 (65.9%)
-- **Hard / Tough**: 379 (16.9%)
+| Examination Year | Official Sessions Covered | Total PYQs | Physics | Chemistry | Mathematics | Single Correct (MCQ) | Numerical | Primary Provenance & License |
+| :---: | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| **2020** | Jan, Oct, Nov, Dec Series | **1,795** | 609 | 591 | 595 | 1,391 | 404 | `soughed/jee-main-questions` (CC-BY-4.0) |
+| **2021** | Jan Official Shifts | **446** | 148 | 140 | 158 | 336 | 110 | `soughed/jee-main-questions` (CC-BY-4.0) |
+| **2022** | June & July Sessions (23 Shifts) | **1,723** | 536 | 512 | 675 | 1,223 | 500 | `ruh-ai/grafite-jee-mains-qna-no-img` (Apache-2.0) |
+| **2023** | Jan & April Sessions (24 Shifts) | **1,805** | 557 | 517 | 731 | 1,257 | 548 | `ruh-ai/grafite-jee-mains-qna-no-img` (Apache-2.0) |
+| **2024** | Jan & April Sessions (20 Shifts) | **1,540** | 517 | 448 | 575 | 1,067 | 473 | `ruh-ai/grafite-jee-mains-qna-no-img` (Apache-2.0) |
+| **2025** | Jan & April Official Sets | **475** | 0 | 0 | 475 | 160 | 315 | `PhysicsWallahAI/JEE-Main-2025-Math` (Apache-2.0) |
+| **2026** | Jan Session (21-29 Jan 2026) | *Telemetry* | — | — | — | — | — | NTA Official Archive & EduDevCommons (Telemetry) |
+| **TOTAL** | **2020–2026 Full Bank** | **7,784** | **2,367** | **2,208** | **3,209** | **5,434** | **2,350** | **Multi-Source Licensed Open Access** |
 
----
-
-## 3. Top Chapters by Question Count
-
-| Subject & Chapter | Question Count | Coverage Status |
-| :--- | :--- | :--- |
-| [Chemistry] Physical Chemistry Fundamentals | 252 | Robust |
-| [Chemistry] General Organic Chemistry | 172 | Robust |
-| [Physics] General Physics | 154 | Robust |
-| [Mathematics] General Mathematics | 78 | Robust |
-| [Mathematics] Straight Lines | 53 | Robust |
-| [Physics] Rigid Body Dynamics | 53 | Robust |
-| [Chemistry] General Chemistry | 51 | Robust |
-| [Physics] Thermodynamics & Thermochemistry | 51 | Robust |
-| [Physics] Fluid Mechanics | 48 | Robust |
-| [Mathematics] Circles | 46 | Robust |
-| [Mathematics] Complex Numbers & Quadratic Equations | 44 | Robust |
-| [Physics] Electrostatics & Capacitance | 42 | Robust |
-| [Mathematics] Binomial Theorem | 30 | Robust |
-| [Physics] Centre of Mass & Collisions | 30 | Robust |
-| [Chemistry] Chemical Bonding & Molecular Structure | 28 | Robust |
-| [Mathematics] Functions & Relations | 26 | Robust |
-| [Mathematics] Vector Algebra | 25 | Robust |
-| [Physics] Newton'S Laws Of Motion | 25 | Robust |
-| [Mathematics] Conic Sections | 24 | Moderate |
-| [Physics] Wave Optics & Interference | 23 | Moderate |
-| [Mathematics] Permutations And Combinations | 22 | Moderate |
-| [Physics] Ray Optics & Optical Instruments | 21 | Moderate |
-| [Physics] Current Electricity | 21 | Moderate |
-| [Physics] Work Power & Energy | 21 | Moderate |
-| [Mathematics] Sequences And Series | 20 | Moderate |
+*Note on 2026 Examination*: NTA conducted JEE Main 2026 Session 1 on January 21–29, 2026. Official response sheets and final keys are candidate-login restricted on `jeemain.nta.nic.in`. Raw shift telemetry and registration analytics are cataloged under `data/question_bank/raw/2026/jee_2026_shift_analysis.csv`.
 
 ---
 
-## 4. Integrity & Data Quality Observations
+## 2. Official 75-Question Full-Length Mock Papers
 
-- **Malformed Records**: 0
-- **Duplicate IDs**: 0
-- **Cross-Exam Repeated Questions**: 84 (Questions re-used across distinct paper shifts by test makers)
-- **Questions with Step-by-Step Solutions**: 1918 (85.6%)
-- **Diagram-Dependent Questions**: 1344 (All mapped with local image references and CloudFront CDN URLs)
-- **Missing Diagrams**: 0 (Zero broken image paths)
+The database contains 8 full-length, authentic examination papers configured in `mock_tests` with 25 questions in Physics, 25 in Chemistry, and 25 in Mathematics (20 MCQs + 5 Numerical values per subject):
 
-> [!IMPORTANT]
-> **Completeness Assessment**: The dataset covers 2,307 authentic questions across 84 paper sets. While offering broad coverage across 195 syllabus chapters and topics, it represents curated high-yield exam sessions (2020–2024 era) rather than an exhaustive index of every single shift from 2016–2026. Hence, it is designated as a **Comprehensive Multi-Paper Question Bank** rather than a 100% complete historical archive.
+| Test ID | Paper Title | Year / Shift | Total Questions | Max Marks | Duration |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| `pyq-jee-2024-jan31-s1` | JEE Main 2024 Official Paper — 31 Jan Morning Shift | 2024 (Jan S1) | 75 | 300 | 180 min |
+| `pyq-jee-2023-jan31-s2` | JEE Main 2023 Official Paper — 31 Jan Evening Shift | 2023 (Jan S2) | 75 | 300 | 180 min |
+| `pyq-jee-2022-jun24-s2` | JEE Main 2022 Official Paper — 24 June Evening Shift | 2022 (Jun S2) | 75 | 300 | 180 min |
+| `pyq-jee-2020-p01` | JEE Main 2020 Official Paper 01 | 2020 (Paper 01) | 75 | 300 | 180 min |
+| `pyq-jee-2020-p06` | JEE Main 2020 Official Paper 06 | 2020 (Paper 06) | 75 | 300 | 180 min |
+| `pyq-jee-2020-p10` | JEE Main 2020 Official Paper 10 | 2020 (Oct Shift) | 75 | 300 | 180 min |
+| `pyq-jee-2020-p11` | JEE Main 2020 Official Paper 11 | 2020 (Nov Shift) | 75 | 300 | 180 min |
+| `pyq-jee-2020-p12` | JEE Main 2020 Official Paper 12 | 2020 (Nov Shift) | 75 | 300 | 180 min |
+
+---
+
+## 3. Database Persistence & Regression Verification
+
+- **Total Questions**: 7,824 (7,784 PYQs + 40 benchmark questions)
+- **Total Question Options**: 21,884
+- **Student Attempts Preserved**: 9/9 attempts (100% data integrity)
+- **Student Profile Preserved**: 1 profile (100% data integrity)
+- **Study Tasks Preserved**: 32/32 tasks (100% data integrity)
+- **Automated Tests**: 35/35 passing (`pytest backend/tests`)
+- **Frontend Production Build**: Clean build, 0 errors (`npm run build`)

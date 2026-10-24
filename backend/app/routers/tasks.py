@@ -30,6 +30,9 @@ def list_tasks(
             taskType=t.task_type,
             priority=t.priority,
             completed=t.completed,
+            completedAt=t.completed_at.isoformat() if t.completed_at else None,
+            retirementStatus=t.retirement_status or "active",
+            retirementReason=t.retirement_reason,
             reason=t.reason,
             isAutoRecommended=t.is_auto_recommended
         )
@@ -56,6 +59,9 @@ def create_task(
         task_type=payload.taskType,
         priority=payload.priority,
         completed=False,
+        completed_at=None,
+        retirement_status="active",
+        retirement_reason=None,
         reason=payload.reason,
         is_auto_recommended=payload.isAutoRecommended
     )
@@ -73,6 +79,9 @@ def create_task(
         taskType=task.task_type,
         priority=task.priority,
         completed=task.completed,
+        completedAt=None,
+        retirementStatus=task.retirement_status or "active",
+        retirementReason=task.retirement_reason,
         reason=task.reason,
         isAutoRecommended=task.is_auto_recommended
     )
@@ -105,8 +114,16 @@ def update_task(
         task.priority = payload.priority
     if payload.completed is not None:
         task.completed = payload.completed
+        if payload.completed:
+            task.completed_at = datetime.utcnow()
+        else:
+            task.completed_at = None
     if payload.reason is not None:
         task.reason = payload.reason
+    if payload.retirementStatus is not None:
+        task.retirement_status = payload.retirementStatus
+    if payload.retirementReason is not None:
+        task.retirement_reason = payload.retirementReason
 
     db.commit()
     db.refresh(task)
@@ -121,6 +138,9 @@ def update_task(
         taskType=task.task_type,
         priority=task.priority,
         completed=task.completed,
+        completedAt=task.completed_at.isoformat() if task.completed_at else None,
+        retirementStatus=task.retirement_status or "active",
+        retirementReason=task.retirement_reason,
         reason=task.reason,
         isAutoRecommended=task.is_auto_recommended
     )
@@ -144,14 +164,18 @@ def add_tasks_from_weak_topics(
     student_id: Optional[str] = "student-aarav-01",
     db: Session = Depends(get_db)
 ):
-    """Auto-generates prioritized tasks from weak concept diagnostics with duplicate prevention."""
+    """Auto-generates prioritized tasks from weak concept diagnostics with duplicate and retirement prevention."""
     created_tasks = []
     days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     existing_tasks = db.query(StudyTaskModel).filter_by(student_id=student_id).all()
-    existing_topics = {t.topic.lower() for t in existing_tasks if not t.completed}
+    
+    # Avoid regenerating tasks for uncompleted topics or topics that are already retired
+    existing_active_topics = {t.topic.lower() for t in existing_tasks if not t.completed}
+    retired_topics = {t.topic.lower() for t in existing_tasks if t.retirement_status == "retired"}
 
     for idx, wt in enumerate(weak_topics):
-        if wt.topic.lower() in existing_topics:
+        topic_lower = wt.topic.lower()
+        if topic_lower in existing_active_topics or topic_lower in retired_topics:
             continue
 
         assigned_day = days[(idx + 1) % len(days)]
@@ -167,6 +191,9 @@ def add_tasks_from_weak_topics(
             task_type="Concept Revision",
             priority=wt.priority or "High",
             completed=False,
+            completed_at=None,
+            retirement_status="active",
+            retirement_reason=None,
             reason=wt.reason or "Auto-recommended from diagnostic examination mark loss.",
             is_auto_recommended=True
         )
@@ -185,8 +212,12 @@ def add_tasks_from_weak_topics(
             taskType=t.task_type,
             priority=t.priority,
             completed=t.completed,
+            completedAt=t.completed_at.isoformat() if t.completed_at else None,
+            retirementStatus=t.retirement_status or "active",
+            retirementReason=t.retirement_reason,
             reason=t.reason,
             isAutoRecommended=t.is_auto_recommended
         )
         for t in created_tasks
     ]
+

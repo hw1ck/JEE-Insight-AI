@@ -16,7 +16,11 @@ class StudyTaskModel(Base):
     task_type = Column(String(32), nullable=False, default="Concept Revision")
     priority = Column(String(16), nullable=False, default="Medium")
     completed = Column(Boolean, default=False, nullable=False)
+    completed_at = Column(DateTime, nullable=True)
+    retirement_status = Column(String(32), default="active", nullable=False)  # 'active', 'improving', 'retired'
+    retirement_reason = Column(Text, nullable=True)
     reason = Column(Text, nullable=False)
     is_auto_recommended = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+

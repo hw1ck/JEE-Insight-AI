@@ -10,7 +10,8 @@ import {
   RotateCcw,
   BarChart2,
   ShieldAlert,
-  Award
+  Award,
+  Bot
 } from 'lucide-react';
 import { scoreSimulatorService, SimulatorInputs } from '../services/scoreSimulatorService';
 import { studyPlannerService } from '../services/studyPlannerService';
@@ -19,7 +20,7 @@ import { ProgressBar } from '../components/common/ProgressBar';
 import { NavPage } from '../components/layout/Sidebar';
 
 interface ScoreSimulatorPageProps {
-  onNavigate: (page: NavPage) => void;
+  onNavigate: (page: NavPage, topicContext?: string) => void;
 }
 
 export const ScoreSimulatorPage: React.FC<ScoreSimulatorPageProps> = ({ onNavigate }) => {
@@ -421,14 +422,24 @@ export const ScoreSimulatorPage: React.FC<ScoreSimulatorPageProps> = ({ onNaviga
             </div>
 
             {/* Apply to Study Plan CTA */}
-            <button
-              onClick={handleApplyToPlan}
-              className="btn btn-primary"
-              style={{ width: '100%', marginTop: '20px', gap: '8px', padding: '10px 16px' }}
-            >
-              <CalendarCheck size={16} />
-              <span>Apply Assumptions to Study Plan</span>
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '20px' }}>
+              <button
+                onClick={handleApplyToPlan}
+                className="btn btn-primary"
+                style={{ width: '100%', gap: '8px', padding: '10px 16px' }}
+              >
+                <CalendarCheck size={16} />
+                <span>Apply Assumptions to Study Plan</span>
+              </button>
+              <button
+                onClick={() => onNavigate('ai-coach', `Score Scenario: +${simulation.scoreDelta} marks target`)}
+                className="btn btn-secondary btn-sm"
+                style={{ width: '100%', gap: '6px', padding: '8px 16px' }}
+              >
+                <Bot size={15} />
+                <span>Discuss Scenario with AI Coach</span>
+              </button>
+            </div>
           </div>
 
           {/* Delta Contributions Breakdown */}

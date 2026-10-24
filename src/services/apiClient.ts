@@ -262,12 +262,158 @@ class ApiClient {
   }
 
   // AI Coach
-  async sendCoachChat(message: string, contextTopic?: string) {
+  async sendCoachChat(payload: {
+    message: string;
+    contextTopic?: string;
+    questionId?: string;
+    attemptId?: string;
+    availableStudyHours?: number;
+    conversationHistory?: Array<{ sender: string; text: string }>;
+  }) {
     return this.request<any>('/coach/chat', {
       method: 'POST',
-      body: JSON.stringify({ message, contextTopic })
+      body: JSON.stringify(payload)
     });
+  }
+
+  async getCoachStatus() {
+    return this.request<{
+      isLiveAiAvailable: boolean;
+      model: string;
+      provider: string;
+      contextSourcesAvailable: string[];
+    }>('/coach/status');
+  }
+
+  async getCoachContextSummary() {
+    return this.request<any>('/coach/context-summary');
+  }
+
+  async getCoachHistory(studentId: string = 'student-aarav-01', sessionId: string = 'default-session') {
+    return this.request<any[]>(`/coach/history?student_id=${encodeURIComponent(studentId)}&session_id=${encodeURIComponent(sessionId)}`);
+  }
+
+  async clearCoachHistory(studentId: string = 'student-aarav-01', sessionId: string = 'default-session') {
+    return this.request<any>(`/coach/history?student_id=${encodeURIComponent(studentId)}&session_id=${encodeURIComponent(sessionId)}`, {
+      method: 'DELETE'
+    });
+  }
+
+  // Question Search & Evaluation
+  async searchQuestions(params: {
+    subject?: string;
+    chapter?: string;
+    topic?: string;
+    difficulty?: string;
+    questionType?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    const query = new URLSearchParams();
+    if (params.subject && params.subject !== 'All') query.set('subject', params.subject);
+    if (params.chapter && params.chapter !== 'All') query.set('chapter', params.chapter);
+    if (params.topic && params.topic !== 'All') query.set('topic', params.topic);
+    if (params.difficulty && params.difficulty !== 'All') query.set('difficulty', params.difficulty);
+    if (params.questionType && params.questionType !== 'All') query.set('question_type', params.questionType);
+    if (params.limit) query.set('limit', String(params.limit));
+    if (params.offset) query.set('offset', String(params.offset));
+
+    const qs = query.toString() ? `?${query.toString()}` : '';
+    return this.request<{ total: number; offset: number; limit: number; items: any[] }>(`/tests/pyq/bank/search${qs}`);
+  }
+
+  async evaluateQuestionAnswer(payload: {
+    questionId: string;
+    selectedOption?: string | null;
+    numericalAnswer?: string | null;
+  }) {
+    return this.request<{
+      questionId: string;
+      questionType: string;
+      isCorrect: boolean;
+      marksAwarded: number;
+      positiveMarks: number;
+      negativeMarks: number;
+      correctOptionId?: string;
+      numericalAnswer?: string;
+      explanation: string;
+      rememberRule?: string;
+      commonMisconception?: string;
+    }>('/tests/pyq/evaluate-answer', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+
+  // CBT Active Attempt State & Recovery
+  async getAttemptState(attemptId: string) {
+    return this.request<{
+      status: 'in_progress' | 'completed';
+      attemptId: string;
+      testId: string;
+      testTitle: string;
+      startTime?: string;
+      elapsedSeconds?: number;
+      durationMinutes?: number;
+      remainingSeconds?: number;
+      isExpired?: boolean;
+      responses?: Record<string, { selectedOption?: string | null; markedForReview?: boolean; timeSpentSeconds?: number }>;
+      answeredCount?: number;
+      score?: number;
+      accuracy?: number;
+    }>(`/attempts/${encodeURIComponent(attemptId)}/state`);
+  }
+
+  // Learning Feedback Loop
+  async getTaskOutcomes(studentId: string = 'student-aarav-01') {
+    return this.request<{
+      studentId: string;
+      totalCompletedTasks: number;
+      evaluatedOutcomes: Array<{
+        taskId: string;
+        topic: string;
+        subject: string;
+        completedAt?: string;
+        status: string;
+        preAccuracy?: number | null;
+        postAccuracy?: number | null;
+        accuracyDelta?: number | null;
+        preQuestionCount: number;
+        postQuestionCount: number;
+        message: string;
+        disclaimer: string;
+      }>;
+      disclaimer: string;
+    }>(`/analytics/feedback-loop/task-outcomes?student_id=${encodeURIComponent(studentId)}`);
+  }
+
+  async getRecommendationRetirement(studentId: string = 'student-aarav-01', threshold: number = 75.0, minQuestions: number = 4) {
+    return this.request<{
+      studentId: string;
+      threshold: number;
+      minQuestions: number;
+      summary: {
+        retired: number;
+        improving: number;
+        active: number;
+        totalEvaluated: number;
+      };
+      recommendations: Array<{
+        topic: string;
+        subject: string;
+        attemptedQuestions: number;
+        correctCount: number;
+        accuracy: number;
+        status: 'retired' | 'improving' | 'active';
+        priority: string;
+        threshold: number;
+        rationale: string;
+        associatedTasksCount: number;
+      }>;
+    }>(`/analytics/feedback-loop/recommendations?student_id=${encodeURIComponent(studentId)}&threshold=${threshold}&min_questions=${minQuestions}`);
   }
 }
 
+
 export const apiClient = new ApiClient(API_BASE_URL);
+

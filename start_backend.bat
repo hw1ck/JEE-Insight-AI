@@ -11,6 +11,7 @@ echo.
 
 :: 1. Set PYTHONPATH to root and backend
 set "PYTHONPATH=%~dp0;%~dp0backend;!PYTHONPATH!"
+set "DISABLE_SQLALCHEMY_CEXT=1"
 
 :: 2. Check Python
 where python >nul 2>nul
@@ -59,6 +60,6 @@ echo [*] Press Ctrl+C to terminate the backend server.
 echo ========================================================
 echo.
 
-call backend\.venv\Scripts\uvicorn.exe backend.app.main:app --host 0.0.0.0 --port 8000 --reload
+call backend\.venv\Scripts\python.exe -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
 
 pause
